@@ -1,0 +1,13 @@
+node_modules/
+dist/
+.env*
+.claude/
+CLAUDE.md
+.DS_Store
+.vscode/
+*.pem
+*.key
+credentials*.json
+docs/IDENTITY.md
+docs/design_ideas/
+docs/palette-preview.html
