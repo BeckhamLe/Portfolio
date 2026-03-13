@@ -8,6 +8,7 @@ const vertexShader = /* glsl */ `
 
   uniform float uProgress;
   uniform float uTime;
+  uniform float uHalfWidth;
 
   varying vec2 vUv;
   varying float vFold;
@@ -17,8 +18,11 @@ const vertexShader = /* glsl */ `
     vUv = uv;
     vec3 pos = position;
 
-    // Fold line sweeps from left to right based on progress
-    float foldX = mix(-1.2, 1.2, uProgress);
+    // Fold line sweeps from right edge to left edge based on progress
+    float margin = 0.5;
+    float rightEdge = uHalfWidth + margin;
+    float leftEdge = -uHalfWidth - margin;
+    float foldX = mix(rightEdge, leftEdge, uProgress);
     float distToFold = pos.x - foldX;
 
     // Vertices behind the fold line curl over
@@ -26,7 +30,7 @@ const vertexShader = /* glsl */ `
     if (distToFold < 0.0) {
       // How far behind the fold this vertex is
       float behind = -distToFold;
-      float maxBehind = 2.4;
+      float maxBehind = uHalfWidth * 2.0;
       float normalizedBehind = clamp(behind / maxBehind, 0.0, 1.0);
 
       // Page curl: arc up and over
@@ -55,10 +59,12 @@ const vertexShader = /* glsl */ `
 `
 
 const fragmentShader = /* glsl */ `
+  #define PI 3.14159265359
   precision highp float;
 
   uniform float uProgress;
   uniform float uTime;
+  uniform float uHalfWidth;
 
   varying vec2 vUv;
   varying float vFold;
@@ -96,8 +102,12 @@ const fragmentShader = /* glsl */ `
       color = revealed;
 
       // Subtle shadow near the fold line
-      float foldX = mix(-1.2, 1.2, uProgress);
-      float distToFold = (vUv.x * 2.0 - 1.0) * 1.2 - foldX; // approximate
+      float margin = 0.5;
+      float rightEdge = uHalfWidth + margin;
+      float leftEdge = -uHalfWidth - margin;
+      float foldX = mix(rightEdge, leftEdge, uProgress);
+      float posX = (vUv.x - 0.5) * uHalfWidth * 2.0;
+      float distToFold = posX - foldX;
       float shadow = smoothstep(0.0, 0.3, distToFold);
       color *= 0.7 + 0.3 * shadow;
     }
@@ -119,10 +129,15 @@ function MorphPanel() {
   const scroll = useScroll()
   const { viewport } = useThree()
 
+  // Size the plane to roughly fill the viewport
+  const width = Math.min(viewport.width * 0.85, 8)
+  const height = Math.min(viewport.height * 0.85, 6)
+
   const uniforms = useMemo(
     () => ({
       uProgress: { value: 0 },
       uTime: { value: 0 },
+      uHalfWidth: { value: width / 2 },
     }),
     []
   )
@@ -132,11 +147,8 @@ function MorphPanel() {
     if (!mat) return
     mat.uniforms.uProgress.value = THREE.MathUtils.clamp(scroll.offset * 2, 0, 1)
     mat.uniforms.uTime.value = clock.getElapsedTime()
+    mat.uniforms.uHalfWidth.value = width / 2
   })
-
-  // Size the plane to roughly fill the viewport
-  const width = Math.min(viewport.width * 0.85, 8)
-  const height = Math.min(viewport.height * 0.85, 6)
 
   return (
     <mesh ref={meshRef}>
