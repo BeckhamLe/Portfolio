@@ -131,4 +131,16 @@ export const effects = [
     hint: 'Move your mouse to morph the Julia set. Auto-zooms over time.',
     notes: '256 max iterations with smooth coloring. Auto-zoom ping-pongs over time. Cosine palette for coloring.',
   },
+  {
+    id: 'dissolve',
+    label: 'Dissolve Wipe',
+    category: 'transition',
+    status: 'working',
+    component: 'DissolveWipe.jsx',
+    description: 'Noise-based dissolve transition with glowing edges. Progress drives a threshold cutoff — pixels vanish where noise falls below the cutoff.',
+    technique: 'noise threshold / dissolve',
+    tools: ['shaderMaterial', 'fragment shader', 'simplex noise'],
+    hint: 'Watch the dissolve cycle. Mouse adds local disturbance.',
+    notes: 'Single-pass fragment shader. FBM noise for organic dissolve pattern. Glowing edge pulses between cyan and pink.',
+  },
 ]
