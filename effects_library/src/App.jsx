@@ -1,4 +1,5 @@
 import { useState, lazy, Suspense } from 'react'
+import { Routes, Route, useParams, useNavigate, Link } from 'react-router-dom'
 import { Canvas } from '@react-three/fiber'
 import { effects } from './effects-registry'
 import './App.css'
@@ -146,7 +147,7 @@ function ToolPill({ children }) {
   )
 }
 
-function Homepage({ onSelect }) {
+function Homepage() {
   const [hoveredId, setHoveredId] = useState(null)
 
   return (
@@ -191,9 +192,9 @@ function Homepage({ onSelect }) {
         {effects.map(effect => {
           const isHovered = hoveredId === effect.id
           return (
-            <button
+            <Link
               key={effect.id}
-              onClick={() => onSelect(effect.id)}
+              to={`/effect/${effect.id}`}
               onMouseEnter={() => setHoveredId(effect.id)}
               onMouseLeave={() => setHoveredId(null)}
               style={{
@@ -213,6 +214,7 @@ function Homepage({ onSelect }) {
                 transition: 'all 0.2s ease',
                 backdropFilter: 'blur(10px)',
                 boxShadow: isHovered ? '0 4px 24px rgba(0,0,0,0.3)' : 'none',
+                textDecoration: 'none',
               }}
             >
               {/* Top row: label + status */}
@@ -246,7 +248,7 @@ function Homepage({ onSelect }) {
                   {effect.technique}
                 </span>
               </div>
-            </button>
+            </Link>
           )
         })}
       </div>
@@ -367,17 +369,17 @@ const sectionLabel = {
   marginBottom: 8,
 }
 
-export default function App() {
-  const [activeDemo, setActiveDemo] = useState(null)
+function DemoView() {
+  const { id } = useParams()
+  const navigate = useNavigate()
   const [showInfo, setShowInfo] = useState(false)
-  const currentEffect = effects.find(e => e.id === activeDemo)
+  const currentEffect = effects.find(e => e.id === id)
 
-  // Homepage
-  if (!activeDemo) {
-    return <Homepage onSelect={setActiveDemo} />
+  // Unknown effect ID — go home
+  if (!currentEffect) {
+    return <Homepage />
   }
 
-  // Demo view
   return (
     <div style={{
       width: '100vw',
@@ -387,8 +389,9 @@ export default function App() {
       position: 'relative',
     }}>
       {/* Back button */}
-      <button
-        onClick={() => { setActiveDemo(null); setShowInfo(false) }}
+      <Link
+        to="/"
+        onClick={() => setShowInfo(false)}
         style={{
           position: 'fixed',
           top: 20,
@@ -405,10 +408,11 @@ export default function App() {
           fontFamily: 'system-ui, -apple-system, sans-serif',
           fontWeight: 500,
           transition: 'all 0.2s',
+          textDecoration: 'none',
         }}
       >
         ← Library
-      </button>
+      </Link>
 
       {/* Info button */}
       <button
@@ -453,13 +457,13 @@ export default function App() {
         </div>
       }>
         <Canvas
-          key={activeDemo}
+          key={id}
           camera={{ position: [0, 0, 8], fov: 50 }}
           style={{ width: '100%', height: '100%' }}
           gl={{ stencil: true, antialias: true }}
         >
           <Suspense fallback={<LoadingFallback />}>
-            <SceneContent activeDemo={activeDemo} />
+            <SceneContent activeDemo={id} />
           </Suspense>
         </Canvas>
       </Suspense>
@@ -487,5 +491,14 @@ export default function App() {
         />
       )}
     </div>
+  )
+}
+
+export default function App() {
+  return (
+    <Routes>
+      <Route path="/" element={<Homepage />} />
+      <Route path="/effect/:id" element={<DemoView />} />
+    </Routes>
   )
 }
