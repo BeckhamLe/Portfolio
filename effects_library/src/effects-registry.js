@@ -131,4 +131,16 @@ export const effects = [
     hint: 'Move your mouse to morph the Julia set. Auto-zooms over time.',
     notes: '256 max iterations with smooth coloring. Auto-zoom ping-pongs over time. Cosine palette for coloring.',
   },
+  {
+    id: 'distortion',
+    label: 'Distortion Wipe',
+    category: 'transition',
+    status: 'working',
+    component: 'DistortionWipe.jsx',
+    description: 'Lusion-style transition with barrel distortion, chromatic aberration, and ripple effects in the blend zone between two layers.',
+    technique: 'displacement distortion / chromatic aberration',
+    tools: ['shaderMaterial', 'fragment shader', 'UV distortion'],
+    hint: 'Watch the distortion sweep. Mouse shifts the distortion center.',
+    notes: 'Single-pass shader faking two-texture blend with procedural color layers. Chromatic aberration splits R/G/B in the transition zone.',
+  },
 ]

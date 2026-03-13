@@ -15,6 +15,7 @@ const RaymarchBlob = lazy(() => import('./components/RaymarchBlob'))
 const CurlNoiseFlow = lazy(() => import('./components/CurlNoiseFlow'))
 const ReactionDiffusion = lazy(() => import('./components/ReactionDiffusion'))
 const FractalZoom = lazy(() => import('./components/FractalZoom'))
+const DistortionWipe = lazy(() => import('./components/DistortionWipe'))
 
 const STATUS_COLORS = {
   working: '#00d4a1',
@@ -72,6 +73,8 @@ function SceneContent({ activeDemo }) {
       return <ReactionDiffusion />
     case 'fractal':
       return <FractalZoom />
+    case 'distortion':
+      return <DistortionWipe />
     default:
       return null
   }
