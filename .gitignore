@@ -11,3 +11,4 @@ credentials*.json
 docs/IDENTITY.md
 docs/design_ideas/
 docs/palette-preview.html
+docs/handoff-*.md

@@ -16,6 +16,9 @@ const CurlNoiseFlow = lazy(() => import('./components/CurlNoiseFlow'))
 const ReactionDiffusion = lazy(() => import('./components/ReactionDiffusion'))
 const FractalZoom = lazy(() => import('./components/FractalZoom'))
 const DissolveWipe = lazy(() => import('./components/DissolveWipe'))
+const DistortionWipe = lazy(() => import('./components/DistortionWipe'))
+const MeshMorph = lazy(() => import('./components/MeshMorph'))
+const PixelSortGlitch = lazy(() => import('./components/PixelSortGlitch'))
 
 const STATUS_COLORS = {
   working: '#00d4a1',
@@ -75,6 +78,12 @@ function SceneContent({ activeDemo }) {
       return <FractalZoom />
     case 'dissolve':
       return <DissolveWipe />
+    case 'distortion':
+      return <DistortionWipe />
+    case 'meshmorph':
+      return <MeshMorph />
+    case 'pixelsort':
+      return <PixelSortGlitch />
     default:
       return null
   }
