@@ -20,6 +20,12 @@ const DissolveWipe = lazy(() => import('./components/DissolveWipe'))
 const DistortionWipe = lazy(() => import('./components/DistortionWipe'))
 const MeshMorph = lazy(() => import('./components/MeshMorph'))
 const PixelSortGlitch = lazy(() => import('./components/PixelSortGlitch'))
+const CardShatter = lazy(() => import('./components/CardShatter'))
+const RibbonPeel = lazy(() => import('./components/RibbonPeel'))
+const PortalTunnel = lazy(() => import('./components/PortalTunnel'))
+const ParticleDissolve = lazy(() => import('./components/ParticleDissolve'))
+const LiquidMorph = lazy(() => import('./components/LiquidMorph'))
+const TerrainBridge = lazy(() => import('./components/TerrainBridge'))
 
 const STATUS_COLORS = {
   working: '#00d4a1',
@@ -85,6 +91,18 @@ function SceneContent({ activeDemo }) {
       return <MeshMorph />
     case 'pixelsort':
       return <PixelSortGlitch />
+    case 'cardshatter':
+      return <CardShatter />
+    case 'ribbonpeel':
+      return <RibbonPeel />
+    case 'portaltunnel':
+      return <PortalTunnel />
+    case 'particledissolve':
+      return <ParticleDissolve />
+    case 'liquidmorph':
+      return <LiquidMorph />
+    case 'terrainbridge':
+      return <TerrainBridge />
     default:
       return null
   }
