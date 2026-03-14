@@ -183,7 +183,7 @@ export const effects = [
     id: 'cardshatter',
     label: 'Card Shatter',
     category: 'transition',
-    status: 'working',
+    status: 'broken',
     component: 'CardShatter.jsx',
     description: 'A card fractures into voronoi shards that drift apart with rotation, then reassemble with new content. Edge shards move first, center last.',
     technique: 'voronoi tessellation / per-cell transforms',
