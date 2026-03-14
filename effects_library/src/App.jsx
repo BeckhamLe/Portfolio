@@ -190,7 +190,7 @@ function Homepage() {
           Effects Library
         </h1>
         <p style={{
-          fontSize: 15,
+          fontSize: 20,
           color: 'rgba(255,255,255,0.4)',
           margin: '0 0 4px',
           fontWeight: 400,
@@ -198,24 +198,29 @@ function Homepage() {
           WebGL shader effects & transitions — R3F + Three.js
         </p>
         <p style={{
-          fontSize: 13,
-          color: 'rgba(255,255,255,0.45)',
-          margin: '0 0 10px',
+          fontSize: 14,
+          color: 'rgba(255,255,255,0.5)',
+          margin: '12px 0 0',
           fontWeight: 400,
+          lineHeight: 1.7,
+          maxWidth: 640,
         }}>
-          Made with the help of <a href="https://claude.ai/code" target="_blank" rel="noopener noreferrer" style={{ color: '#7ba4d4', textDecoration: 'none', borderBottom: '1px solid rgba(96,165,250,0.25)' }}>Claude Code</a>
+          A living catalog of experimental WebGL effects I'm building and iterating on.
+          Many will be in broken or half-finished states at any given time — that's by design.
+          I pull from these for other projects, and circle back to fix and refine as I go.
         </p>
         <p style={{
-          fontSize: 12,
-          color: 'rgba(255,255,255,0.35)',
-          margin: 0,
+          fontSize: 14,
+          color: 'rgba(255,255,255,0.4)',
+          margin: '8px 0 0',
           fontWeight: 400,
-          lineHeight: 1.6,
+          lineHeight: 1.7,
         }}>
-          Inspired by and wouldn't be possible without{' '}
+          Made with the help of <a href="https://claude.ai/code" target="_blank" rel="noopener noreferrer" style={{ color: '#7ba4d4', textDecoration: 'none', borderBottom: '1px solid rgba(96,165,250,0.25)' }}>Claude Code</a>.
+          {' '}Inspired by and wouldn't be possible without{' '}
           <a href="https://mark-n.co/projects/lusion-reverse-engineered/" target="_blank" rel="noopener noreferrer" style={{ color: '#7ba4d4', textDecoration: 'none', borderBottom: '1px solid rgba(96,165,250,0.25)' }}>Mark N's reverse-engineering case study</a>
           {' '}and the{' '}
-          <a href="https://www.awwwards.com/case-study-for-lusion-by-lusion-winner-of-site-of-the-month-may.html" target="_blank" rel="noopener noreferrer" style={{ color: '#7ba4d4', textDecoration: 'none', borderBottom: '1px solid rgba(96,165,250,0.25)' }}>Lusion Awwwards case study</a>
+          <a href="https://www.awwwards.com/case-study-for-lusion-by-lusion-winner-of-site-of-the-month-may.html" target="_blank" rel="noopener noreferrer" style={{ color: '#7ba4d4', textDecoration: 'none', borderBottom: '1px solid rgba(96,165,250,0.25)' }}>Lusion Awwwards case study</a>.
         </p>
       </div>
 
