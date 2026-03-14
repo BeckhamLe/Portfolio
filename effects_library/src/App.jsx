@@ -198,6 +198,18 @@ function Homepage() {
           WebGL shader effects & transitions — R3F + Three.js
         </p>
         <p style={{
+          fontSize: 14,
+          color: 'rgba(255,255,255,0.5)',
+          margin: '16px 0 20px',
+          fontWeight: 400,
+          lineHeight: 1.7,
+          maxWidth: 640,
+        }}>
+          A living catalog of experimental WebGL effects I'm building and iterating on.
+          Many will be in broken or half-finished states at any given time — that's by design.
+          I pull from these for other projects, and circle back to fix and refine as I go.
+        </p>
+        <p style={{
           fontSize: 13,
           color: 'rgba(255,255,255,0.45)',
           margin: '0 0 10px',
