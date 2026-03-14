@@ -20,6 +20,12 @@ const DissolveWipe = lazy(() => import('./components/DissolveWipe'))
 const DistortionWipe = lazy(() => import('./components/DistortionWipe'))
 const MeshMorph = lazy(() => import('./components/MeshMorph'))
 const PixelSortGlitch = lazy(() => import('./components/PixelSortGlitch'))
+const CardShatter = lazy(() => import('./components/CardShatter'))
+const RibbonPeel = lazy(() => import('./components/RibbonPeel'))
+const PortalTunnel = lazy(() => import('./components/PortalTunnel'))
+const ParticleDissolve = lazy(() => import('./components/ParticleDissolve'))
+const LiquidMorph = lazy(() => import('./components/LiquidMorph'))
+const TerrainBridge = lazy(() => import('./components/TerrainBridge'))
 
 const STATUS_COLORS = {
   working: '#00d4a1',
@@ -85,6 +91,18 @@ function SceneContent({ activeDemo }) {
       return <MeshMorph />
     case 'pixelsort':
       return <PixelSortGlitch />
+    case 'cardshatter':
+      return <CardShatter />
+    case 'ribbonpeel':
+      return <RibbonPeel />
+    case 'portaltunnel':
+      return <PortalTunnel />
+    case 'particledissolve':
+      return <ParticleDissolve />
+    case 'liquidmorph':
+      return <LiquidMorph />
+    case 'terrainbridge':
+      return <TerrainBridge />
     default:
       return null
   }
@@ -174,10 +192,30 @@ function Homepage() {
         <p style={{
           fontSize: 15,
           color: 'rgba(255,255,255,0.4)',
-          margin: 0,
+          margin: '0 0 4px',
           fontWeight: 400,
         }}>
           WebGL shader effects & transitions — R3F + Three.js
+        </p>
+        <p style={{
+          fontSize: 13,
+          color: 'rgba(255,255,255,0.45)',
+          margin: '0 0 10px',
+          fontWeight: 400,
+        }}>
+          Made with the help of <a href="https://claude.ai/code" target="_blank" rel="noopener noreferrer" style={{ color: '#7ba4d4', textDecoration: 'none', borderBottom: '1px solid rgba(96,165,250,0.25)' }}>Claude Code</a>
+        </p>
+        <p style={{
+          fontSize: 12,
+          color: 'rgba(255,255,255,0.35)',
+          margin: 0,
+          fontWeight: 400,
+          lineHeight: 1.6,
+        }}>
+          Inspired by and wouldn't be possible without{' '}
+          <a href="https://mark-n.co/projects/lusion-reverse-engineered/" target="_blank" rel="noopener noreferrer" style={{ color: '#7ba4d4', textDecoration: 'none', borderBottom: '1px solid rgba(96,165,250,0.25)' }}>Mark N's reverse-engineering case study</a>
+          {' '}and the{' '}
+          <a href="https://www.awwwards.com/case-study-for-lusion-by-lusion-winner-of-site-of-the-month-may.html" target="_blank" rel="noopener noreferrer" style={{ color: '#7ba4d4', textDecoration: 'none', borderBottom: '1px solid rgba(96,165,250,0.25)' }}>Lusion Awwwards case study</a>
         </p>
       </div>
 
