@@ -26,6 +26,9 @@ const PortalTunnel = lazy(() => import('./components/PortalTunnel'))
 const ParticleDissolve = lazy(() => import('./components/ParticleDissolve'))
 const LiquidMorph = lazy(() => import('./components/LiquidMorph'))
 const TerrainBridge = lazy(() => import('./components/TerrainBridge'))
+const GravitySandbox = lazy(() => import('./components/GravitySandbox'))
+const ScrollVelocitySmear = lazy(() => import('./components/ScrollVelocitySmear'))
+const TypeToShatter = lazy(() => import('./components/TypeToShatter'))
 
 const STATUS_COLORS = {
   working: '#00d4a1',
@@ -103,6 +106,12 @@ function SceneContent({ activeDemo }) {
       return <LiquidMorph />
     case 'terrainbridge':
       return <TerrainBridge />
+    case 'gravitysandbox':
+      return <GravitySandbox />
+    case 'scrollsmear':
+      return <ScrollVelocitySmear />
+    case 'typeshatter':
+      return <TypeToShatter />
     default:
       return null
   }
