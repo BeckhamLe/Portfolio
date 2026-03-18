@@ -183,7 +183,7 @@ export const effects = [
     id: 'cardshatter',
     label: 'Card Shatter',
     category: 'transition',
-    status: 'working',
+    status: 'in-progress',
     component: 'CardShatter.jsx',
     description: 'A card fractures into triangle shards that tumble downward like paper in wind, then reform. Scroll-driven with staggered per-shard timing.',
     technique: 'vertex-driven shard animation / split geometry',
