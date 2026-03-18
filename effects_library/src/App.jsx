@@ -29,14 +29,14 @@ const TerrainBridge = lazy(() => import('./components/TerrainBridge'))
 
 const STATUS_COLORS = {
   working: '#00d4a1',
+  'in-progress': '#ffc107',
   broken: '#ff4757',
-  wip: '#ffc107',
 }
 
 const STATUS_LABELS = {
   working: 'Working',
+  'in-progress': 'In Progress',
   broken: 'Broken',
-  wip: 'WIP',
 }
 
 const CATEGORY_COLORS = {
