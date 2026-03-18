@@ -165,8 +165,7 @@ const fragmentShader = /* glsl */ `
   // Sample card texture within card bounds
   vec3 sampleCard(vec2 uv, vec2 cardMin, vec2 cardMax) {
     vec2 cardUV = (uv - cardMin) / (cardMax - cardMin);
-    // Flip Y since canvas has Y-down
-    cardUV.y = 1.0 - cardUV.y;
+    // Canvas Y is already correct for UV space
     return texture2D(uCardTexture, clamp(cardUV, 0.0, 1.0)).rgb;
   }
 
@@ -175,10 +174,13 @@ const fragmentShader = /* glsl */ `
     float vel = uVelocity;
     float absVel = abs(vel);
 
-    // Aspect-corrected card bounds (taller card to fit text)
+    // Card bounds: match canvas aspect ratio (800x1000 = 0.8:1)
+    // so card width should be 0.8x of card height to avoid stretching
     float aspect = uResolution.x / uResolution.y;
     vec2 cardCenter = vec2(0.5, 0.5);
-    vec2 cardHalf = vec2(0.22, 0.28);
+    float cardH = 0.38; // card half-height in UV
+    float cardW = cardH * 0.8 / aspect; // maintain 800:1000 ratio, corrected for screen aspect
+    vec2 cardHalf = vec2(cardW, cardH);
     vec2 cardMin = cardCenter - cardHalf;
     vec2 cardMax = cardCenter + cardHalf;
     float cornerRadius = 0.008;
