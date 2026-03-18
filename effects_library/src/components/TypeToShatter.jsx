@@ -1,180 +1,120 @@
 import { useRef, useMemo, useEffect, useCallback } from 'react'
-import { useFrame } from '@react-three/fiber'
+import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { Html } from '@react-three/drei'
 
-/**
- * Type to Shatter — A pristine dark surface that cracks with each keystroke.
- * Damage accumulates as cracks persist. Backspace heals the last crack with
- * a reverse ripple animation. Crack state stored in JS arrays passed as
- * uniforms (no FBOs). Max 20 active cracks.
- */
-
 const MAX_CRACKS = 20
 const PLANE_SIZE = 8
-const CRACK_SETTLE_TIME = 1.0
-const HEAL_DURATION = 0.5
 
 const vertexShader = /* glsl */ `
+  #define PI 3.14159265359
   #define MAX_CRACKS 20
 
   uniform float uTime;
-  uniform vec2 uCrackPositions[MAX_CRACKS];
-  uniform float uCrackTimes[MAX_CRACKS];
-  uniform float uCrackActives[MAX_CRACKS];
+  uniform vec2 uCrackPos[MAX_CRACKS];
+  uniform float uCrackTime[MAX_CRACKS];
+  uniform float uCrackState[MAX_CRACKS]; // 1.0 = active, 0.0 = settled, -1.0 = healing
   uniform int uCrackCount;
-  uniform float uPlaneSize;
-  uniform float uBaseDisplacements[MAX_CRACKS];
 
   varying float vDisplacement;
   varying vec2 vUv;
-  varying vec3 vWorldPos;
+  varying vec3 vNormal;
 
   void main() {
     vUv = uv;
     vec3 pos = position;
-    float totalDisplacement = 0.0;
+    float totalDisp = 0.0;
 
-    // Map UV to world-space coords on the plane
     vec2 worldXY = pos.xy;
 
     for (int i = 0; i < MAX_CRACKS; i++) {
       if (i >= uCrackCount) break;
 
-      vec2 crackPos = uCrackPositions[i];
-      float crackTime = uCrackTimes[i];
-      float active = uCrackActives[i];
-      float baseDis = uBaseDisplacements[i];
+      vec2 cp = uCrackPos[i];
+      float ct = uCrackTime[i];
+      float state = uCrackState[i];
+      float age = uTime - ct;
+      float dist = distance(worldXY, cp);
 
-      float age = uTime - crackTime;
-      float dist = distance(worldXY, crackPos);
+      // Crack shape: sharp peak at center, falls off with distance
+      float crackDepth = 0.4 / (1.0 + dist * dist * 6.0);
 
-      // Permanent crack displacement: sharp falloff from crack center
-      float crackStrength = 0.35;
-      float permanentDisp = crackStrength / (1.0 + dist * dist * 8.0);
-
-      if (active > 0.5) {
-        // Active crack — animate in over CRACK_SETTLE_TIME
-        // Expanding ring that settles into permanent displacement
-        float settleT = clamp(age / 1.0, 0.0, 1.0); // 1.0 = CRACK_SETTLE_TIME
-        float ringRadius = age * 4.0;
-        float ringWidth = 1.5;
-        float ring = exp(-pow(dist - ringRadius, 2.0) / ringWidth);
-        float ringAmplitude = 0.25 * exp(-age * 1.5);
-
-        // Blend from ring animation to permanent crack
-        float animDisp = ring * ringAmplitude;
-        float disp = mix(animDisp, permanentDisp, settleT);
-        totalDisplacement += disp;
-      } else if (active < -0.5) {
-        // Healing crack — reverse animation
-        float healAge = uTime - crackTime; // crackTime is reset when healing starts
-        float healT = clamp(healAge / 0.5, 0.0, 1.0); // 0.5 = HEAL_DURATION
-
-        // Reverse ripple: start from permanent, fade to zero
-        float reverseRingRadius = healAge * 5.0;
-        float reverseRing = exp(-pow(dist - reverseRingRadius, 2.0) / 1.0);
-        float reverseAmplitude = 0.15 * (1.0 - healT);
-
-        float disp = permanentDisp * (1.0 - healT) + reverseRing * reverseAmplitude;
-        totalDisplacement += disp;
+      if (state > 0.5) {
+        // Active: expanding ring settles into permanent crack
+        float settle = clamp(age / 1.0, 0.0, 1.0);
+        float ringRadius = age * 5.0;
+        float ring = exp(-(dist - ringRadius) * (dist - ringRadius) / 1.5);
+        float ringAmp = 0.3 * exp(-age * 2.0);
+        totalDisp += mix(ring * ringAmp, crackDepth, settle);
+      } else if (state < -0.5) {
+        // Healing: fade out over 0.5s
+        float healT = clamp(age / 0.5, 0.0, 1.0);
+        totalDisp += crackDepth * (1.0 - healT);
       } else {
-        // Fully settled crack
-        totalDisplacement += permanentDisp + baseDis;
+        // Settled: permanent
+        totalDisp += crackDepth;
       }
     }
 
-    // Displace downward (negative Z)
-    pos.z -= totalDisplacement;
-    vDisplacement = totalDisplacement;
-    vWorldPos = pos;
+    pos.z -= totalDisp;
+    vDisplacement = totalDisp;
+
+    // Compute normal from displacement for lighting
+    vNormal = normalize(vec3(0.0, 0.0, 1.0));
 
     gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
   }
 `
 
 const fragmentShader = /* glsl */ `
+  #define PI 3.14159265359
   #define MAX_CRACKS 20
+  precision highp float;
 
   uniform float uTime;
-  uniform vec2 uCrackPositions[MAX_CRACKS];
-  uniform float uCrackTimes[MAX_CRACKS];
-  uniform float uCrackActives[MAX_CRACKS];
+  uniform vec2 uCrackPos[MAX_CRACKS];
   uniform int uCrackCount;
-  uniform float uPlaneSize;
 
   varying float vDisplacement;
   varying vec2 vUv;
-  varying vec3 vWorldPos;
 
   void main() {
-    // Base color: dark metallic blue-gray
-    vec3 baseColor1 = vec3(0.04, 0.05, 0.08);
-    vec3 baseColor2 = vec3(0.06, 0.07, 0.12);
-    vec3 baseColor = mix(baseColor1, baseColor2, vUv.y * 0.8 + vUv.x * 0.2);
+    // Base: light metallic surface (silver-blue) so it's clearly visible
+    vec3 baseColor = mix(
+      vec3(0.55, 0.58, 0.65),
+      vec3(0.45, 0.48, 0.55),
+      vUv.y
+    );
 
-    // Subtle specular highlight in pristine areas
+    // Specular highlight
     vec2 center = vUv - 0.5;
-    float specular = exp(-dot(center, center) * 6.0) * 0.06;
-    baseColor += vec3(specular * 0.6, specular * 0.7, specular);
+    float spec = exp(-dot(center, center) * 4.0) * 0.2;
+    baseColor += vec3(spec);
 
-    // Compute displacement gradient for crack edge detection
-    float gradient = 0.0;
-    vec2 worldXY = vWorldPos.xy;
+    // Subtle grid pattern on surface
+    float gx = smoothstep(0.48, 0.5, abs(fract(vUv.x * 16.0) - 0.5));
+    float gy = smoothstep(0.48, 0.5, abs(fract(vUv.y * 16.0) - 0.5));
+    baseColor -= (gx + gy) * 0.03;
 
+    // Crack glow: bright cyan near crack centers
+    float crackGlow = 0.0;
+    vec2 worldXY = (vUv - 0.5) * vec2(1.0) * 8.0; // approximate world position from UV
     for (int i = 0; i < MAX_CRACKS; i++) {
       if (i >= uCrackCount) break;
-      float active = uCrackActives[i];
-      if (active < -0.5) {
-        // Healing — fade the crack visuals
-        float healAge = uTime - uCrackTimes[i];
-        float healT = clamp(healAge / 0.5, 0.0, 1.0);
-        if (healT >= 1.0) continue;
-
-        float dist = distance(worldXY, uCrackPositions[i]);
-        float g = 0.35 * 16.0 * dist / pow(1.0 + dist * dist * 8.0, 2.0);
-        gradient += g * (1.0 - healT);
-      } else {
-        float dist = distance(worldXY, uCrackPositions[i]);
-        // Derivative of crackStrength / (1 + d^2 * 8) with respect to d
-        float g = 0.35 * 16.0 * dist / pow(1.0 + dist * dist * 8.0, 2.0);
-
-        // For active cracks, fade in the gradient
-        if (active > 0.5) {
-          float age = uTime - uCrackTimes[i];
-          float settleT = clamp(age / 1.0, 0.0, 1.0);
-          gradient += g * settleT;
-        } else {
-          gradient += g;
-        }
-      }
+      float dist = distance(worldXY, uCrackPos[i]);
+      crackGlow += 0.2 / (1.0 + dist * dist * 15.0);
     }
+    vec3 glowColor = vec3(0.0, 0.85, 1.0);
+    baseColor += glowColor * crackGlow * 0.8;
 
-    // Crack edge glow: bright cyan/white where gradient is steep
-    float edgeIntensity = smoothstep(0.02, 0.15, gradient);
-    vec3 crackGlow = mix(vec3(0.0, 0.8, 1.0), vec3(1.0, 1.0, 1.0), edgeIntensity * 0.5);
-    baseColor += crackGlow * edgeIntensity * 0.8;
+    // Damage: displaced areas shift warm
+    float damage = smoothstep(0.05, 0.4, vDisplacement);
+    vec3 damageColor = vec3(1.0, 0.4, 0.1);
+    baseColor = mix(baseColor, damageColor, damage * 0.5);
 
-    // Damage coloring: high displacement shifts toward warm orange/red
-    float damageT = smoothstep(0.05, 0.35, vDisplacement);
-    vec3 damageColor = mix(vec3(0.8, 0.3, 0.05), vec3(1.0, 0.15, 0.05), damageT);
-    baseColor = mix(baseColor, damageColor, damageT * 0.6);
-
-    // Subtle glow at crack centers
-    float crackProximity = 0.0;
-    for (int i = 0; i < MAX_CRACKS; i++) {
-      if (i >= uCrackCount) break;
-      float active = uCrackActives[i];
-      if (active < -0.5) continue;
-      float dist = distance(worldXY, uCrackPositions[i]);
-      crackProximity += 0.15 / (1.0 + dist * dist * 20.0);
-    }
-    baseColor += vec3(0.0, 0.5, 0.7) * crackProximity;
-
-    // Edge fade
-    float edgeDist = min(min(vUv.x, 1.0 - vUv.x), min(vUv.y, 1.0 - vUv.y));
-    float edgeFade = smoothstep(0.0, 0.05, edgeDist);
-    baseColor *= edgeFade;
+    // Darken edges
+    float edge = smoothstep(0.0, 0.05, min(min(vUv.x, 1.0 - vUv.x), min(vUv.y, 1.0 - vUv.y)));
+    baseColor *= edge;
 
     gl_FragColor = vec4(baseColor, 1.0);
   }
@@ -182,159 +122,129 @@ const fragmentShader = /* glsl */ `
 
 export default function TypeToShatter() {
   const meshRef = useRef()
-  const cracksRef = useRef([]) // { x, y, time, active: 'active' | 'healing' | 'settled' }
-  const healingCracksRef = useRef([]) // cracks being healed, tracked separately for cleanup
-  const startTimeRef = useRef(null)
+  const cracksRef = useRef([])
+  const timeRef = useRef(0)
 
-  const uniforms = useMemo(() => {
-    // Pre-create vec2 array for crack positions
-    const crackPositions = []
-    for (let i = 0; i < MAX_CRACKS; i++) {
-      crackPositions.push(new THREE.Vector2(0, 0))
-    }
-    // Use regular arrays for float uniforms (Float32Array can cause issues with uniform arrays)
-    const crackTimes = new Array(MAX_CRACKS).fill(0)
-    const crackActives = new Array(MAX_CRACKS).fill(0)
-    const baseDisplacements = new Array(MAX_CRACKS).fill(0)
+  // Create uniform values that persist across frames
+  const crackPosArray = useMemo(() => {
+    const arr = []
+    for (let i = 0; i < MAX_CRACKS; i++) arr.push(new THREE.Vector2(0, 0))
+    return arr
+  }, [])
+  const crackTimeArray = useMemo(() => new Array(MAX_CRACKS).fill(0), [])
+  const crackStateArray = useMemo(() => new Array(MAX_CRACKS).fill(0), [])
 
-    return {
-      uTime: { value: 0 },
-      uCrackPositions: { value: crackPositions },
-      uCrackTimes: { value: crackTimes },
-      uCrackActives: { value: crackActives },
-      uCrackCount: { value: 0 },
-      uPlaneSize: { value: PLANE_SIZE },
-      uBaseDisplacements: { value: baseDisplacements },
+  const uniforms = useMemo(() => ({
+    uTime: { value: 0 },
+    uCrackPos: { value: crackPosArray },
+    uCrackTime: { value: crackTimeArray },
+    uCrackState: { value: crackStateArray },
+    uCrackCount: { value: 0 },
+  }), [])
+
+  // Keyboard handler
+  useEffect(() => {
+    function onKeyDown(e) {
+      if (e.repeat) return
+
+      const time = timeRef.current
+      const cracks = cracksRef.current
+
+      if (e.key === 'Backspace') {
+        e.preventDefault()
+        // Heal last active/settled crack
+        for (let i = cracks.length - 1; i >= 0; i--) {
+          if (cracks[i].state === 'active' || cracks[i].state === 'settled') {
+            cracks[i].state = 'healing'
+            cracks[i].healStart = time
+            break
+          }
+        }
+        return
+      }
+
+      // Only printable characters
+      if (e.key.length !== 1) return
+
+      // Random position on surface (world coords: -3.2 to 3.2 on each axis)
+      const x = (Math.random() - 0.5) * PLANE_SIZE * 0.8
+      const y = (Math.random() - 0.5) * PLANE_SIZE * 0.8
+
+      // Cap active cracks
+      const live = cracks.filter(c => c.state !== 'removed')
+      if (live.length >= MAX_CRACKS) {
+        for (let i = 0; i < cracks.length; i++) {
+          if (cracks[i].state === 'settled' || cracks[i].state === 'active') {
+            cracks[i].state = 'removed'
+            break
+          }
+        }
+      }
+
+      cracks.push({ x, y, time, state: 'active', healStart: 0 })
     }
+
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
   }, [])
 
-  const handleKeyDown = useCallback((e) => {
-    // Ignore held keys
-    if (e.repeat) return
-
-    const cracks = cracksRef.current
-    const time = uniforms.uTime.value
-
-    if (e.key === 'Backspace') {
-      e.preventDefault()
-
-      // Find the last active or settled crack and heal it
-      for (let i = cracks.length - 1; i >= 0; i--) {
-        if (cracks[i].state === 'active' || cracks[i].state === 'settled') {
-          cracks[i].state = 'healing'
-          cracks[i].healStart = time
-          break
-        }
-      }
-      return
-    }
-
-    // Only respond to printable characters
-    if (e.key.length !== 1) return
-
-    // Random position on the surface (in world-space coordinates of the plane)
-    const halfSize = PLANE_SIZE / 2
-    const x = (Math.random() - 0.5) * PLANE_SIZE * 0.8
-    const y = (Math.random() - 0.5) * PLANE_SIZE * 0.8
-
-    // If we're at max, bake the oldest settled crack and free the slot
-    const activeCracks = cracks.filter(c => c.state !== 'removed')
-    if (activeCracks.length >= MAX_CRACKS) {
-      // Remove the oldest non-healing crack
-      for (let i = 0; i < cracks.length; i++) {
-        if (cracks[i].state === 'settled' || cracks[i].state === 'active') {
-          cracks[i].state = 'removed'
-          break
-        }
-      }
-    }
-
-    cracks.push({
-      x,
-      y,
-      time,
-      state: 'active', // 'active' | 'settled' | 'healing' | 'removed'
-      healStart: 0,
-    })
-  }, [uniforms])
-
-  useEffect(() => {
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [handleKeyDown])
-
   useFrame(({ clock }) => {
-    if (startTimeRef.current === null) {
-      startTimeRef.current = clock.elapsedTime
-    }
-    const time = clock.elapsedTime - startTimeRef.current
+    const time = clock.getElapsedTime()
+    timeRef.current = time
     uniforms.uTime.value = time
 
     const cracks = cracksRef.current
 
-    // Update crack states
-    for (let i = 0; i < cracks.length; i++) {
-      const crack = cracks[i]
-      if (crack.state === 'active') {
-        const age = time - crack.time
-        if (age > CRACK_SETTLE_TIME) {
-          crack.state = 'settled'
-        }
-      } else if (crack.state === 'healing') {
-        const healAge = time - crack.healStart
-        if (healAge > HEAL_DURATION) {
-          crack.state = 'removed'
-        }
+    // Update states
+    for (const crack of cracks) {
+      if (crack.state === 'active' && time - crack.time > 1.0) {
+        crack.state = 'settled'
+      }
+      if (crack.state === 'healing' && time - crack.healStart > 0.5) {
+        crack.state = 'removed'
       }
     }
 
-    // Clean up removed cracks
+    // Remove dead cracks
     cracksRef.current = cracks.filter(c => c.state !== 'removed')
 
-    // Update uniforms from crack state
-    const liveCracks = cracksRef.current
-    const count = Math.min(liveCracks.length, MAX_CRACKS)
-
-    // Build new arrays each frame for clean uniform updates
-    const positions = uniforms.uCrackPositions.value
-    const times = uniforms.uCrackTimes.value
-    const actives = uniforms.uCrackActives.value
-    const baseDis = uniforms.uBaseDisplacements.value
+    // Sync to uniforms
+    const live = cracksRef.current
+    const count = Math.min(live.length, MAX_CRACKS)
 
     for (let i = 0; i < MAX_CRACKS; i++) {
       if (i < count) {
-        const crack = liveCracks[i]
-        positions[i].set(crack.x, crack.y)
+        const c = live[i]
+        crackPosArray[i].set(c.x, c.y)
 
-        if (crack.state === 'healing') {
-          times[i] = crack.healStart
-          actives[i] = -1.0
-        } else if (crack.state === 'active') {
-          times[i] = crack.time
-          actives[i] = 1.0
+        if (c.state === 'healing') {
+          crackTimeArray[i] = c.healStart
+          crackStateArray[i] = -1.0
+        } else if (c.state === 'active') {
+          crackTimeArray[i] = c.time
+          crackStateArray[i] = 1.0
         } else {
-          times[i] = crack.time
-          actives[i] = 0.0
+          crackTimeArray[i] = c.time
+          crackStateArray[i] = 0.0
         }
-        baseDis[i] = 0.0
       } else {
-        positions[i].set(0, 0)
-        times[i] = 0
-        actives[i] = 0
-        baseDis[i] = 0
+        crackPosArray[i].set(0, 0)
+        crackTimeArray[i] = 0
+        crackStateArray[i] = 0
       }
     }
     uniforms.uCrackCount.value = count
 
-    // Slow rotation
+    // Gentle tilt
     if (meshRef.current) {
-      meshRef.current.rotation.x = -Math.PI * 0.3 + Math.sin(time * 0.15) * 0.03
+      meshRef.current.rotation.x = -0.5 + Math.sin(time * 0.15) * 0.03
     }
   })
 
   return (
-    <group>
-      <mesh ref={meshRef} rotation={[-Math.PI * 0.3, 0, 0]}>
+    <>
+      <color attach="background" args={['#0a0a12']} />
+      <mesh ref={meshRef} rotation={[-0.5, 0, 0]}>
         <planeGeometry args={[PLANE_SIZE, PLANE_SIZE, 64, 64]} />
         <shaderMaterial
           vertexShader={vertexShader}
@@ -360,6 +270,6 @@ export default function TypeToShatter() {
           Type to crack the surface &nbsp;|&nbsp; Backspace to heal
         </div>
       </Html>
-    </group>
+    </>
   )
 }

@@ -255,7 +255,7 @@ export const effects = [
     id: 'gravitysandbox',
     label: 'Gravity Sandbox',
     category: 'effect',
-    status: 'in-progress',
+    status: 'working',
     component: 'GravitySandbox.jsx',
     description: 'Interactive gravity playground. Arrow keys control gravity direction, click spawns shapes, spacebar freezes time.',
     technique: 'instanced mesh / keyboard-driven simulation',

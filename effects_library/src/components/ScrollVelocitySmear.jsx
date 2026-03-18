@@ -1,7 +1,140 @@
-import { useRef, useMemo } from 'react'
+import { useRef, useMemo, useEffect } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import { useScroll, ScrollControls } from '@react-three/drei'
 import * as THREE from 'three'
+
+// Render a realistic card with real text to an offscreen canvas
+function createCardTexture() {
+  const canvas = document.createElement('canvas')
+  const w = 800
+  const h = 1000
+  canvas.width = w
+  canvas.height = h
+  const ctx = canvas.getContext('2d')
+
+  // White card background
+  ctx.fillStyle = '#ffffff'
+  ctx.beginPath()
+  ctx.roundRect(0, 0, w, h, 16)
+  ctx.fill()
+
+  // Blue header bar
+  ctx.fillStyle = '#2563eb'
+  ctx.beginPath()
+  ctx.roundRect(0, 0, w, 80, [16, 16, 0, 0])
+  ctx.fill()
+
+  // Header text
+  ctx.fillStyle = '#ffffff'
+  ctx.font = 'bold 24px system-ui, -apple-system, sans-serif'
+  ctx.fillText('Project Dashboard', 30, 50)
+
+  // Avatar circle
+  ctx.fillStyle = '#e0e7ff'
+  ctx.beginPath()
+  ctx.arc(w - 55, 40, 22, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.fillStyle = '#6366f1'
+  ctx.font = 'bold 18px system-ui'
+  ctx.fillText('BL', w - 67, 46)
+
+  // Title
+  ctx.fillStyle = '#111827'
+  ctx.font = 'bold 28px system-ui, -apple-system, sans-serif'
+  ctx.fillText('Building Interactive 3D Effects', 30, 140)
+
+  // Subtitle
+  ctx.fillStyle = '#6b7280'
+  ctx.font = '16px system-ui, -apple-system, sans-serif'
+  ctx.fillText('A deep dive into shader-driven web animations', 30, 172)
+
+  // Divider line
+  ctx.strokeStyle = '#e5e7eb'
+  ctx.lineWidth = 1
+  ctx.beginPath()
+  ctx.moveTo(30, 195)
+  ctx.lineTo(w - 30, 195)
+  ctx.stroke()
+
+  // Body text paragraphs
+  ctx.fillStyle = '#374151'
+  ctx.font = '15px system-ui, -apple-system, sans-serif'
+  const lines = [
+    'Modern web experiences demand more than static layouts.',
+    'Users expect fluid, responsive interactions that feel',
+    'alive. This project explores the intersection of WebGL',
+    'shaders and scroll-driven animation to create effects',
+    'that respond to user behavior in real time.',
+    '',
+    'The key insight is that scroll velocity — not just scroll',
+    'position — carries expressive information. A fast scroll',
+    'implies urgency or browsing, while a slow scroll implies',
+    'reading. By mapping velocity to visual distortion, we',
+    'create a feedback loop between user intent and visual',
+    'response.',
+    '',
+    'This card demonstrates the concept. Scroll slowly and',
+    'the content stays crisp. Scroll fast and watch the card',
+    'stretch, blur, and shift — like reality bending under',
+    'the force of your momentum.',
+  ]
+  let y = 225
+  for (const line of lines) {
+    if (line === '') { y += 10; continue }
+    ctx.fillText(line, 30, y)
+    y += 24
+  }
+
+  // Stats row
+  const statsY = y + 20
+  ctx.strokeStyle = '#e5e7eb'
+  ctx.beginPath()
+  ctx.moveTo(30, statsY - 10)
+  ctx.lineTo(w - 30, statsY - 10)
+  ctx.stroke()
+
+  // Stat boxes
+  const stats = [
+    { label: 'Effects', value: '24' },
+    { label: 'Shaders', value: '18' },
+    { label: 'FPS', value: '60' },
+    { label: 'Status', value: 'Live' },
+  ]
+  const statWidth = (w - 60) / stats.length
+  stats.forEach((stat, i) => {
+    const sx = 30 + i * statWidth
+    ctx.fillStyle = '#111827'
+    ctx.font = 'bold 24px system-ui'
+    ctx.fillText(stat.value, sx + 10, statsY + 25)
+    ctx.fillStyle = '#9ca3af'
+    ctx.font = '13px system-ui'
+    ctx.fillText(stat.label, sx + 10, statsY + 45)
+  })
+
+  // Button at bottom
+  const btnY = h - 80
+  ctx.fillStyle = '#2563eb'
+  ctx.beginPath()
+  ctx.roundRect(30, btnY, 180, 44, 8)
+  ctx.fill()
+  ctx.fillStyle = '#ffffff'
+  ctx.font = 'bold 15px system-ui'
+  ctx.fillText('View Effects →', 55, btnY + 28)
+
+  // Secondary button
+  ctx.strokeStyle = '#d1d5db'
+  ctx.lineWidth = 1.5
+  ctx.beginPath()
+  ctx.roundRect(230, btnY, 140, 44, 8)
+  ctx.stroke()
+  ctx.fillStyle = '#374151'
+  ctx.font = '15px system-ui'
+  ctx.fillText('Learn More', 260, btnY + 28)
+
+  const texture = new THREE.CanvasTexture(canvas)
+  texture.needsUpdate = true
+  return texture
+}
 
 const vertexShader = /* glsl */ `
   varying vec2 vUv;
@@ -17,129 +150,83 @@ const fragmentShader = /* glsl */ `
   uniform float uVelocity;
   uniform float uTime;
   uniform vec2 uResolution;
+  uniform sampler2D uCardTexture;
 
   varying vec2 vUv;
 
   #define PI 3.14159265359
 
-  // --- Card geometry ---
-  // Rounded rectangle SDF for card shape
+  // Rounded rectangle SDF
   float cardSDF(vec2 uv, vec2 center, vec2 halfSize, float radius) {
     vec2 d = abs(uv - center) - halfSize + radius;
     return length(max(d, 0.0)) + min(max(d.x, d.y), 0.0) - radius;
   }
 
-  // --- Procedural card content: white card with text-like content ---
-  vec3 cardContent(vec2 uv, vec2 cardMin, vec2 cardMax) {
-    // Normalize UV within card bounds
+  // Sample card texture within card bounds
+  vec3 sampleCard(vec2 uv, vec2 cardMin, vec2 cardMax) {
     vec2 cardUV = (uv - cardMin) / (cardMax - cardMin);
-
-    // White/light gray card background
-    vec3 color = vec3(0.97, 0.97, 0.98);
-
-    // Subtle paper texture noise
-    float noise = fract(sin(dot(cardUV * 200.0, vec2(12.9898, 78.233))) * 43758.5453);
-    color -= noise * 0.015;
-
-    // Header area: accent bar at top (top 12% of card)
-    float headerMask = smoothstep(0.88, 0.90, cardUV.y);
-    vec3 headerColor = vec3(0.15, 0.35, 0.95); // blue header
-    color = mix(color, headerColor, headerMask);
-
-    // "Title" block: dark bar simulating heading text (below header)
-    float titleY = smoothstep(0.78, 0.80, cardUV.y) * (1.0 - smoothstep(0.84, 0.86, cardUV.y));
-    float titleX = step(0.08, cardUV.x) * step(cardUV.x, 0.55);
-    color = mix(color, vec3(0.15, 0.15, 0.18), titleY * titleX * 0.9);
-
-    // "Subtitle" block: lighter gray bar
-    float subY = smoothstep(0.72, 0.735, cardUV.y) * (1.0 - smoothstep(0.75, 0.765, cardUV.y));
-    float subX = step(0.08, cardUV.x) * step(cardUV.x, 0.70);
-    color = mix(color, vec3(0.55, 0.55, 0.58), subY * subX * 0.8);
-
-    // "Body text" lines: multiple thin gray bars simulating paragraphs
-    for (int i = 0; i < 8; i++) {
-      float lineBase = 0.62 - float(i) * 0.065;
-      float lineY = smoothstep(lineBase - 0.008, lineBase, cardUV.y) * (1.0 - smoothstep(lineBase + 0.012, lineBase + 0.02, cardUV.y));
-      // Vary line width to look like real text
-      float lineWidth = 0.85 - float(i % 3) * 0.15;
-      float lineX = step(0.08, cardUV.x) * step(cardUV.x, lineWidth);
-      color = mix(color, vec3(0.65, 0.65, 0.68), lineY * lineX * 0.6);
-    }
-
-    // Small "button" at bottom
-    float btnY = smoothstep(0.08, 0.10, cardUV.y) * (1.0 - smoothstep(0.14, 0.16, cardUV.y));
-    float btnX = step(0.08, cardUV.x) * step(cardUV.x, 0.35);
-    vec3 btnColor = vec3(0.15, 0.35, 0.95);
-    color = mix(color, btnColor, btnY * btnX * 0.9);
-
-    // Card shadow at edges (inner shadow for depth)
-    float edgeShadow = smoothstep(0.0, 0.03, cardUV.x) * smoothstep(0.0, 0.03, 1.0 - cardUV.x)
-                     * smoothstep(0.0, 0.03, cardUV.y) * smoothstep(0.0, 0.03, 1.0 - cardUV.y);
-    color *= 0.95 + 0.05 * edgeShadow;
-
-    return color;
+    // Flip Y since canvas has Y-down
+    cardUV.y = 1.0 - cardUV.y;
+    return texture2D(uCardTexture, clamp(cardUV, 0.0, 1.0)).rgb;
   }
 
   void main() {
     vec2 uv = vUv;
-    float vel = uVelocity; // -1 to 1, negative = up, positive = down
+    float vel = uVelocity;
     float absVel = abs(vel);
 
-    // --- Card bounds ---
+    // Aspect-corrected card bounds (taller card to fit text)
+    float aspect = uResolution.x / uResolution.y;
     vec2 cardCenter = vec2(0.5, 0.5);
-    vec2 cardHalf = vec2(0.30, 0.20); // 60% width, 40% height
+    vec2 cardHalf = vec2(0.22, 0.28);
     vec2 cardMin = cardCenter - cardHalf;
     vec2 cardMax = cardCenter + cardHalf;
-    float cornerRadius = 0.012;
+    float cornerRadius = 0.008;
 
     // --- UV distortion based on velocity ---
     vec2 distortedUV = uv;
 
-    // Low velocity: subtle wobble
-    float wobble = sin(uv.y * 20.0 + uTime * 2.0) * 0.002 * absVel;
+    // Wobble
+    float wobble = sin(uv.y * 20.0 + uTime * 2.0) * 0.003 * absVel;
     distortedUV.x += wobble;
 
-    // Medium-high velocity: vertical stretch in scroll direction
+    // Vertical stretch in scroll direction
     float stretchAmount = absVel * 0.15;
-    float stretchDir = sign(vel);
-    // Offset the stretch center in the direction of motion
-    float stretchCenter = 0.5 + stretchDir * stretchAmount * 0.3;
+    float stretchCenter = 0.5 + sign(vel) * stretchAmount * 0.3;
     distortedUV.y = mix(distortedUV.y, stretchCenter, stretchAmount * 0.5);
-    // Directional offset
-    distortedUV.y += vel * 0.02;
+    distortedUV.y += vel * 0.025;
 
     // --- Chromatic aberration ---
-    float caAmount = smoothstep(0.2, 1.0, absVel) * 0.015;
-    // Split along vertical axis (scroll direction)
+    float caAmount = smoothstep(0.15, 1.0, absVel) * 0.02;
     vec2 caOffset = vec2(0.0, caAmount * sign(vel));
 
     vec2 uvR = distortedUV + caOffset;
     vec2 uvG = distortedUV;
     vec2 uvB = distortedUV - caOffset;
 
-    // --- Motion blur (multi-sample along scroll direction) ---
-    float blurSpread = smoothstep(0.5, 1.0, absVel) * 0.04;
+    // --- Motion blur ---
+    float blurSpread = smoothstep(0.4, 1.0, absVel) * 0.05;
 
-    // Background color (soft dark gray to contrast with white card)
-    vec3 bgColor = vec3(0.08, 0.08, 0.12);
+    // Background
+    vec3 bgColor = vec3(0.06, 0.06, 0.10);
 
-    // Card drop shadow (slightly larger than card, blurred)
-    float shadowDist = cardSDF(distortedUV, cardCenter + vec2(0.003, -0.005), cardHalf + 0.01, cornerRadius + 0.01);
-    float shadowMask = 1.0 - smoothstep(-0.02, 0.02, shadowDist);
-    bgColor = mix(bgColor, vec3(0.02, 0.02, 0.04), shadowMask * 0.5);
+    // Card drop shadow
+    float shadowDist = cardSDF(distortedUV, cardCenter + vec2(0.004, -0.006), cardHalf + 0.015, cornerRadius + 0.01);
+    float shadowMask = 1.0 - smoothstep(-0.025, 0.025, shadowDist);
+    bgColor = mix(bgColor, vec3(0.01, 0.01, 0.03), shadowMask * 0.6);
 
     vec3 finalColor = vec3(0.0);
 
-    if (absVel > 0.5 && blurSpread > 0.001) {
-      // Motion blur path: multi-sample
+    if (absVel > 0.4 && blurSpread > 0.001) {
+      // Motion blur: multi-sample
       vec3 accumR = vec3(0.0);
       vec3 accumG = vec3(0.0);
       vec3 accumB = vec3(0.0);
       float totalWeight = 0.0;
 
-      for (int i = 0; i < 7; i++) {
-        float t = (float(i) / 6.0 - 0.5) * 2.0; // -1 to 1
-        float weight = 1.0 - abs(t) * 0.5; // center-weighted
+      for (int i = 0; i < 9; i++) {
+        float t = (float(i) / 8.0 - 0.5) * 2.0;
+        float weight = 1.0 - abs(t) * 0.5;
         vec2 blurOff = vec2(0.0, t * blurSpread * sign(vel));
 
         vec2 sR = uvR + blurOff;
@@ -154,9 +241,9 @@ const fragmentShader = /* glsl */ `
         float maskG = 1.0 - smoothstep(-0.002, 0.002, dG);
         float maskB = 1.0 - smoothstep(-0.002, 0.002, dB);
 
-        vec3 cR = mix(bgColor, cardContent(sR, cardMin, cardMax), maskR);
-        vec3 cG = mix(bgColor, cardContent(sG, cardMin, cardMax), maskG);
-        vec3 cB = mix(bgColor, cardContent(sB, cardMin, cardMax), maskB);
+        vec3 cR = mix(bgColor, sampleCard(sR, cardMin, cardMax), maskR);
+        vec3 cG = mix(bgColor, sampleCard(sG, cardMin, cardMax), maskG);
+        vec3 cB = mix(bgColor, sampleCard(sB, cardMin, cardMax), maskB);
 
         accumR += cR * weight;
         accumG += cG * weight;
@@ -164,13 +251,9 @@ const fragmentShader = /* glsl */ `
         totalWeight += weight;
       }
 
-      accumR /= totalWeight;
-      accumG /= totalWeight;
-      accumB /= totalWeight;
-
-      finalColor = vec3(accumR.r, accumG.g, accumB.b);
+      finalColor = vec3(accumR.r / totalWeight, accumG.g / totalWeight, accumB.b / totalWeight);
     } else {
-      // No motion blur: single sample with chromatic aberration
+      // Single sample with CA
       float dR = cardSDF(uvR, cardCenter, cardHalf, cornerRadius);
       float dG = cardSDF(uvG, cardCenter, cardHalf, cornerRadius);
       float dB = cardSDF(uvB, cardCenter, cardHalf, cornerRadius);
@@ -179,21 +262,21 @@ const fragmentShader = /* glsl */ `
       float maskG = 1.0 - smoothstep(-0.002, 0.002, dG);
       float maskB = 1.0 - smoothstep(-0.002, 0.002, dB);
 
-      vec3 cR = mix(bgColor, cardContent(uvR, cardMin, cardMax), maskR);
-      vec3 cG = mix(bgColor, cardContent(uvG, cardMin, cardMax), maskG);
-      vec3 cB = mix(bgColor, cardContent(uvB, cardMin, cardMax), maskB);
+      vec3 cR = mix(bgColor, sampleCard(uvR, cardMin, cardMax), maskR);
+      vec3 cG = mix(bgColor, sampleCard(uvG, cardMin, cardMax), maskG);
+      vec3 cB = mix(bgColor, sampleCard(uvB, cardMin, cardMax), maskB);
 
       finalColor = vec3(cR.r, cG.g, cB.b);
     }
 
-    // --- Warm color shift at high velocity ---
+    // Warm color shift at high velocity
     float warmShift = smoothstep(0.6, 1.0, absVel) * 0.3;
     finalColor.r += warmShift * 0.08;
     finalColor.g -= warmShift * 0.02;
     finalColor.b -= warmShift * 0.04;
 
-    // --- Subtle vignette ---
-    float vignette = 1.0 - length((uv - 0.5) * 1.5) * 0.3;
+    // Vignette
+    float vignette = 1.0 - length((uv - 0.5) * 1.5) * 0.25;
     finalColor *= vignette;
 
     gl_FragColor = vec4(finalColor, 1.0);
@@ -207,11 +290,14 @@ function SmearScene() {
   const lastOffset = useRef(null)
   const smoothedVelocity = useRef(0)
 
+  const cardTexture = useMemo(() => createCardTexture(), [])
+
   const uniforms = useMemo(
     () => ({
       uVelocity: { value: 0 },
       uTime: { value: 0 },
       uResolution: { value: new THREE.Vector2(size.width, size.height) },
+      uCardTexture: { value: cardTexture },
     }),
     []
   )
@@ -222,16 +308,13 @@ function SmearScene() {
 
     const currentOffset = scroll.offset
 
-    // Initialize lastOffset on first frame to avoid velocity spike
     if (lastOffset.current === null) {
       lastOffset.current = currentOffset
     }
 
-    // Compute raw velocity
     const rawVelocity = currentOffset - lastOffset.current
     lastOffset.current = currentOffset
 
-    // Smooth and scale velocity
     const targetVelocity = rawVelocity * 50
     smoothedVelocity.current = THREE.MathUtils.lerp(
       smoothedVelocity.current,
@@ -239,7 +322,6 @@ function SmearScene() {
       0.08
     )
 
-    // Clamp to -1..1 range
     const vel = THREE.MathUtils.clamp(smoothedVelocity.current, -1, 1)
 
     mat.uniforms.uVelocity.value = vel
