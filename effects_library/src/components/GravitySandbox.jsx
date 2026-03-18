@@ -164,15 +164,37 @@ function GravitySimulation() {
     }
   }, [])
 
-  // Click to spawn
+  // Mouse position tracking for spawn-at-cursor
+  const mouseRef = useRef(new THREE.Vector2(0, 0))
+
+  useEffect(() => {
+    function onMouseMove(e) {
+      // Normalize to -1..1
+      mouseRef.current.set(
+        (e.clientX / window.innerWidth) * 2 - 1,
+        -(e.clientY / window.innerHeight) * 2 + 1
+      )
+    }
+    window.addEventListener('mousemove', onMouseMove)
+    return () => window.removeEventListener('mousemove', onMouseMove)
+  }, [])
+
+  // Click to spawn at mouse position
   useEffect(() => {
     function onClick() {
       const state = simState.current
       const inst = createInstance(state.nextId++)
-      // Spawn near center
+
+      // Unproject mouse position to 3D world space at z=0 plane
+      const mouse3D = new THREE.Vector3(mouseRef.current.x, mouseRef.current.y, 0.5)
+      mouse3D.unproject(camera)
+      const dir = mouse3D.sub(camera.position).normalize()
+      const dist = -camera.position.z / dir.z
+      const worldPos = camera.position.clone().add(dir.multiplyScalar(dist))
+
       inst.position.set(
-        (Math.random() - 0.5) * 2,
-        (Math.random() - 0.5) * 2,
+        THREE.MathUtils.clamp(worldPos.x, -BOUNDARY + 1, BOUNDARY - 1),
+        THREE.MathUtils.clamp(worldPos.y, -BOUNDARY + 1, BOUNDARY - 1),
         (Math.random() - 0.5) * 2
       )
       state.instances.push(inst)
@@ -184,7 +206,7 @@ function GravitySimulation() {
 
     window.addEventListener('click', onClick)
     return () => window.removeEventListener('click', onClick)
-  }, [])
+  }, [camera])
 
   // Dummy object for building instance matrices
   const dummy = useMemo(() => new THREE.Object3D(), [])

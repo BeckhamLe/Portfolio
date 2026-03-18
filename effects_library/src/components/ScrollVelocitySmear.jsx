@@ -29,33 +29,53 @@ const fragmentShader = /* glsl */ `
     return length(max(d, 0.0)) + min(max(d.x, d.y), 0.0) - radius;
   }
 
-  // --- Procedural card content ---
+  // --- Procedural card content: white card with text-like content ---
   vec3 cardContent(vec2 uv, vec2 cardMin, vec2 cardMax) {
     // Normalize UV within card bounds
     vec2 cardUV = (uv - cardMin) / (cardMax - cardMin);
 
-    // Dark gradient background
-    vec3 bg1 = vec3(0.08, 0.06, 0.14);
-    vec3 bg2 = vec3(0.04, 0.08, 0.16);
-    vec3 color = mix(bg1, bg2, cardUV.y);
+    // White/light gray card background
+    vec3 color = vec3(0.97, 0.97, 0.98);
 
-    // Subtle grid lines
-    vec2 gridUV = cardUV * vec2(12.0, 8.0);
-    vec2 grid = abs(fract(gridUV) - 0.5);
-    float gridLine = 1.0 - smoothstep(0.0, 0.03, min(grid.x, grid.y));
-    color += gridLine * vec3(0.08, 0.06, 0.12);
+    // Subtle paper texture noise
+    float noise = fract(sin(dot(cardUV * 200.0, vec2(12.9898, 78.233))) * 43758.5453);
+    color -= noise * 0.015;
 
-    // Accent gradient bar at top (top 6% of card)
-    float barMask = smoothstep(0.94, 0.96, cardUV.y);
-    vec3 accentLeft = vec3(0.2, 0.5, 1.0);
-    vec3 accentRight = vec3(0.7, 0.2, 0.9);
-    vec3 accent = mix(accentLeft, accentRight, cardUV.x);
-    color = mix(color, accent, barMask);
+    // Header area: accent bar at top (top 12% of card)
+    float headerMask = smoothstep(0.88, 0.90, cardUV.y);
+    vec3 headerColor = vec3(0.15, 0.35, 0.95); // blue header
+    color = mix(color, headerColor, headerMask);
 
-    // Subtle inner glow near center
-    float centerGlow = 1.0 - length((cardUV - 0.5) * vec2(1.4, 1.8));
-    centerGlow = max(centerGlow, 0.0);
-    color += centerGlow * vec3(0.03, 0.02, 0.06);
+    // "Title" block: dark bar simulating heading text (below header)
+    float titleY = smoothstep(0.78, 0.80, cardUV.y) * (1.0 - smoothstep(0.84, 0.86, cardUV.y));
+    float titleX = step(0.08, cardUV.x) * step(cardUV.x, 0.55);
+    color = mix(color, vec3(0.15, 0.15, 0.18), titleY * titleX * 0.9);
+
+    // "Subtitle" block: lighter gray bar
+    float subY = smoothstep(0.72, 0.735, cardUV.y) * (1.0 - smoothstep(0.75, 0.765, cardUV.y));
+    float subX = step(0.08, cardUV.x) * step(cardUV.x, 0.70);
+    color = mix(color, vec3(0.55, 0.55, 0.58), subY * subX * 0.8);
+
+    // "Body text" lines: multiple thin gray bars simulating paragraphs
+    for (int i = 0; i < 8; i++) {
+      float lineBase = 0.62 - float(i) * 0.065;
+      float lineY = smoothstep(lineBase - 0.008, lineBase, cardUV.y) * (1.0 - smoothstep(lineBase + 0.012, lineBase + 0.02, cardUV.y));
+      // Vary line width to look like real text
+      float lineWidth = 0.85 - float(i % 3) * 0.15;
+      float lineX = step(0.08, cardUV.x) * step(cardUV.x, lineWidth);
+      color = mix(color, vec3(0.65, 0.65, 0.68), lineY * lineX * 0.6);
+    }
+
+    // Small "button" at bottom
+    float btnY = smoothstep(0.08, 0.10, cardUV.y) * (1.0 - smoothstep(0.14, 0.16, cardUV.y));
+    float btnX = step(0.08, cardUV.x) * step(cardUV.x, 0.35);
+    vec3 btnColor = vec3(0.15, 0.35, 0.95);
+    color = mix(color, btnColor, btnY * btnX * 0.9);
+
+    // Card shadow at edges (inner shadow for depth)
+    float edgeShadow = smoothstep(0.0, 0.03, cardUV.x) * smoothstep(0.0, 0.03, 1.0 - cardUV.x)
+                     * smoothstep(0.0, 0.03, cardUV.y) * smoothstep(0.0, 0.03, 1.0 - cardUV.y);
+    color *= 0.95 + 0.05 * edgeShadow;
 
     return color;
   }
@@ -100,8 +120,13 @@ const fragmentShader = /* glsl */ `
     // --- Motion blur (multi-sample along scroll direction) ---
     float blurSpread = smoothstep(0.5, 1.0, absVel) * 0.04;
 
-    // Background color (dark)
-    vec3 bgColor = vec3(0.03, 0.02, 0.05);
+    // Background color (soft dark gray to contrast with white card)
+    vec3 bgColor = vec3(0.08, 0.08, 0.12);
+
+    // Card drop shadow (slightly larger than card, blurred)
+    float shadowDist = cardSDF(distortedUV, cardCenter + vec2(0.003, -0.005), cardHalf + 0.01, cornerRadius + 0.01);
+    float shadowMask = 1.0 - smoothstep(-0.02, 0.02, shadowDist);
+    bgColor = mix(bgColor, vec3(0.02, 0.02, 0.04), shadowMask * 0.5);
 
     vec3 finalColor = vec3(0.0);
 

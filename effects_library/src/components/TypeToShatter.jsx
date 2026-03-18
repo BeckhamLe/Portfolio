@@ -186,15 +186,27 @@ export default function TypeToShatter() {
   const healingCracksRef = useRef([]) // cracks being healed, tracked separately for cleanup
   const startTimeRef = useRef(null)
 
-  const uniforms = useMemo(() => ({
-    uTime: { value: 0 },
-    uCrackPositions: { value: Array(MAX_CRACKS).fill(null).map(() => new THREE.Vector2()) },
-    uCrackTimes: { value: new Float32Array(MAX_CRACKS) },
-    uCrackActives: { value: new Float32Array(MAX_CRACKS) }, // 1 = active, 0 = settled, -1 = healing
-    uCrackCount: { value: 0 },
-    uPlaneSize: { value: PLANE_SIZE },
-    uBaseDisplacements: { value: new Float32Array(MAX_CRACKS) },
-  }), [])
+  const uniforms = useMemo(() => {
+    // Pre-create vec2 array for crack positions
+    const crackPositions = []
+    for (let i = 0; i < MAX_CRACKS; i++) {
+      crackPositions.push(new THREE.Vector2(0, 0))
+    }
+    // Use regular arrays for float uniforms (Float32Array can cause issues with uniform arrays)
+    const crackTimes = new Array(MAX_CRACKS).fill(0)
+    const crackActives = new Array(MAX_CRACKS).fill(0)
+    const baseDisplacements = new Array(MAX_CRACKS).fill(0)
+
+    return {
+      uTime: { value: 0 },
+      uCrackPositions: { value: crackPositions },
+      uCrackTimes: { value: crackTimes },
+      uCrackActives: { value: crackActives },
+      uCrackCount: { value: 0 },
+      uPlaneSize: { value: PLANE_SIZE },
+      uBaseDisplacements: { value: baseDisplacements },
+    }
+  }, [])
 
   const handleKeyDown = useCallback((e) => {
     // Ignore held keys
@@ -283,28 +295,33 @@ export default function TypeToShatter() {
     const liveCracks = cracksRef.current
     const count = Math.min(liveCracks.length, MAX_CRACKS)
 
+    // Build new arrays each frame for clean uniform updates
+    const positions = uniforms.uCrackPositions.value
+    const times = uniforms.uCrackTimes.value
+    const actives = uniforms.uCrackActives.value
+    const baseDis = uniforms.uBaseDisplacements.value
+
     for (let i = 0; i < MAX_CRACKS; i++) {
       if (i < count) {
         const crack = liveCracks[i]
-        uniforms.uCrackPositions.value[i].set(crack.x, crack.y)
+        positions[i].set(crack.x, crack.y)
 
         if (crack.state === 'healing') {
-          uniforms.uCrackTimes.value[i] = crack.healStart
-          uniforms.uCrackActives.value[i] = -1.0
+          times[i] = crack.healStart
+          actives[i] = -1.0
         } else if (crack.state === 'active') {
-          uniforms.uCrackTimes.value[i] = crack.time
-          uniforms.uCrackActives.value[i] = 1.0
+          times[i] = crack.time
+          actives[i] = 1.0
         } else {
-          // settled
-          uniforms.uCrackTimes.value[i] = crack.time
-          uniforms.uCrackActives.value[i] = 0.0
+          times[i] = crack.time
+          actives[i] = 0.0
         }
-        uniforms.uBaseDisplacements.value[i] = 0.0
+        baseDis[i] = 0.0
       } else {
-        uniforms.uCrackPositions.value[i].set(0, 0)
-        uniforms.uCrackTimes.value[i] = 0
-        uniforms.uCrackActives.value[i] = 0
-        uniforms.uBaseDisplacements.value[i] = 0
+        positions[i].set(0, 0)
+        times[i] = 0
+        actives[i] = 0
+        baseDis[i] = 0
       }
     }
     uniforms.uCrackCount.value = count
@@ -326,16 +343,21 @@ export default function TypeToShatter() {
           side={THREE.DoubleSide}
         />
       </mesh>
-      <Html center position={[0, -3.5, 0]} style={{ pointerEvents: 'none' }}>
+      <Html fullscreen style={{ pointerEvents: 'none' }}>
         <div style={{
+          position: 'fixed',
+          bottom: 40,
+          left: '50%',
+          transform: 'translateX(-50%)',
           color: 'rgba(255,255,255,0.35)',
           fontFamily: 'system-ui, -apple-system, sans-serif',
           fontSize: 13,
           textAlign: 'center',
           whiteSpace: 'nowrap',
           userSelect: 'none',
+          pointerEvents: 'none',
         }}>
-          Type to crack the surface | Backspace to heal
+          Type to crack the surface &nbsp;|&nbsp; Backspace to heal
         </div>
       </Html>
     </group>
