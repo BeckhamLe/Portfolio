@@ -31,6 +31,9 @@ const ScrollVelocitySmear = lazy(() => import('./components/ScrollVelocitySmear'
 const TypeToShatter = lazy(() => import('./components/TypeToShatter'))
 const SoundReactiveMesh = lazy(() => import('./components/SoundReactiveMesh'))
 const DragToSculpt = lazy(() => import('./components/DragToSculpt'))
+const ImageHoverDistortion = lazy(() => import('./components/ImageHoverDistortion'))
+const ImageToParticles = lazy(() => import('./components/ImageToParticles'))
+const CutoutImageEffect = lazy(() => import('./components/CutoutImageEffect'))
 
 const STATUS_COLORS = {
   working: '#00d4a1',
@@ -118,6 +121,12 @@ function SceneContent({ activeDemo }) {
       return <SoundReactiveMesh />
     case 'dragtosculpt':
       return <DragToSculpt />
+    case 'imagehover':
+      return <ImageHoverDistortion />
+    case 'imagetoparticles':
+      return <ImageToParticles />
+    case 'cutoutimage':
+      return <CutoutImageEffect />
     default:
       return null
   }
