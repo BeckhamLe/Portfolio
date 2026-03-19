@@ -34,6 +34,17 @@ const DragToSculpt = lazy(() => import('./components/DragToSculpt'))
 const ImageHoverDistortion = lazy(() => import('./components/ImageHoverDistortion'))
 const ShardSwarm = lazy(() => import('./components/ImageToParticles'))
 const CutoutImageEffect = lazy(() => import('./components/CutoutImageEffect'))
+const ExtrudedText3D = lazy(() => import('./components/ExtrudedText3D'))
+const LiquidTextFill = lazy(() => import('./components/LiquidTextFill'))
+const TextParticleScatter = lazy(() => import('./components/TextParticleScatter'))
+const DepthParallax = lazy(() => import('./components/DepthParallax'))
+const DepthZoom = lazy(() => import('./components/DepthZoom'))
+const FocusPull = lazy(() => import('./components/FocusPull'))
+const DepthParticleLift = lazy(() => import('./components/DepthParticleLift'))
+const MagneticCursor = lazy(() => import('./components/MagneticCursor'))
+const InkBleedCursor = lazy(() => import('./components/InkBleedCursor'))
+const BloomGrain = lazy(() => import('./components/BloomGrain'))
+const VignetteGrade = lazy(() => import('./components/VignetteGrade'))
 
 const STATUS_COLORS = {
   working: '#00d4a1',
@@ -127,6 +138,28 @@ function SceneContent({ activeDemo }) {
       return <ShardSwarm />
     case 'cutoutimage':
       return <CutoutImageEffect />
+    case 'extrudedtext':
+      return <ExtrudedText3D />
+    case 'liquidtext':
+      return <LiquidTextFill />
+    case 'textscatter':
+      return <TextParticleScatter />
+    case 'depthparallax':
+      return <DepthParallax />
+    case 'depthzoom':
+      return <DepthZoom />
+    case 'focuspull':
+      return <FocusPull />
+    case 'depthlift':
+      return <DepthParticleLift />
+    case 'magneticcursor':
+      return <MagneticCursor />
+    case 'inkbleed':
+      return <InkBleedCursor />
+    case 'bloomgrain':
+      return <BloomGrain />
+    case 'vignettegrade':
+      return <VignetteGrade />
     default:
       return null
   }
