@@ -3,9 +3,13 @@ import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { ScrollControls, useScroll } from '@react-three/drei'
 
-const GRID_COLS = 100
-const GRID_ROWS = 100
-const PARTICLE_COUNT = GRID_COLS * GRID_ROWS
+// Card dimensions
+const CARD_WIDTH = 4.0
+const CARD_HEIGHT = 5.0
+const SUBDIVS_X = 20
+const SUBDIVS_Y = 25
+// Each triangle shard gets subdivided for smoother look
+const SHARD_SUBDIVS = 3
 
 // JS smoothstep for camera follow
 function smoothstep(edge0, edge1, x) {
@@ -13,7 +17,7 @@ function smoothstep(edge0, edge1, x) {
   return t * t * (3 - 2 * t)
 }
 
-// Card texture matching ScrollVelocitySmear style — readable content card
+// Card texture — readable content card
 function createCardTexture(variant) {
   const canvas = document.createElement('canvas')
   const w = 800
@@ -22,14 +26,12 @@ function createCardTexture(variant) {
   canvas.height = h
   const ctx = canvas.getContext('2d')
 
-  // White card background with rounded corners
   ctx.fillStyle = '#ffffff'
   ctx.beginPath()
   ctx.roundRect(0, 0, w, h, 16)
   ctx.fill()
 
   if (variant === 'A') {
-    // Blue header
     ctx.fillStyle = '#2563eb'
     ctx.beginPath()
     ctx.roundRect(0, 0, w, 80, [16, 16, 0, 0])
@@ -39,7 +41,6 @@ function createCardTexture(variant) {
     ctx.font = 'bold 24px system-ui, -apple-system, sans-serif'
     ctx.fillText('Presentation Builder', 30, 50)
 
-    // Avatar
     ctx.fillStyle = '#e0e7ff'
     ctx.beginPath()
     ctx.arc(w - 55, 40, 22, 0, Math.PI * 2)
@@ -48,7 +49,6 @@ function createCardTexture(variant) {
     ctx.font = 'bold 18px system-ui'
     ctx.fillText('BL', w - 67, 46)
 
-    // Title
     ctx.fillStyle = '#111827'
     ctx.font = 'bold 28px system-ui, -apple-system, sans-serif'
     ctx.fillText('AI-Powered Slide Generation', 30, 140)
@@ -57,7 +57,6 @@ function createCardTexture(variant) {
     ctx.font = '16px system-ui, -apple-system, sans-serif'
     ctx.fillText('Conversational presentation design tool', 30, 172)
 
-    // Divider
     ctx.strokeStyle = '#e5e7eb'
     ctx.lineWidth = 1
     ctx.beginPath()
@@ -65,7 +64,6 @@ function createCardTexture(variant) {
     ctx.lineTo(w - 30, 195)
     ctx.stroke()
 
-    // Body text
     ctx.fillStyle = '#374151'
     ctx.font = '15px system-ui, -apple-system, sans-serif'
     const lines = [
@@ -88,7 +86,6 @@ function createCardTexture(variant) {
       y += 24
     }
 
-    // Stats
     const statsY = y + 20
     ctx.strokeStyle = '#e5e7eb'
     ctx.beginPath()
@@ -112,7 +109,6 @@ function createCardTexture(variant) {
       ctx.fillText(stat.label, sx + 10, statsY + 45)
     })
 
-    // Button
     const btnY = h - 80
     ctx.fillStyle = '#2563eb'
     ctx.beginPath()
@@ -122,7 +118,6 @@ function createCardTexture(variant) {
     ctx.font = 'bold 15px system-ui'
     ctx.fillText('Try It Out →', 62, btnY + 28)
   } else {
-    // Purple header for variant B
     ctx.fillStyle = '#7c3aed'
     ctx.beginPath()
     ctx.roundRect(0, 0, w, 80, [16, 16, 0, 0])
@@ -132,7 +127,6 @@ function createCardTexture(variant) {
     ctx.font = 'bold 24px system-ui, -apple-system, sans-serif'
     ctx.fillText('AR Scavenger Hunt', 30, 50)
 
-    // Avatar
     ctx.fillStyle = '#ede9fe'
     ctx.beginPath()
     ctx.arc(w - 55, 40, 22, 0, Math.PI * 2)
@@ -141,7 +135,6 @@ function createCardTexture(variant) {
     ctx.font = 'bold 18px system-ui'
     ctx.fillText('AR', w - 68, 46)
 
-    // Title
     ctx.fillStyle = '#111827'
     ctx.font = 'bold 28px system-ui, -apple-system, sans-serif'
     ctx.fillText('Location-Based AR Game', 30, 140)
@@ -150,7 +143,6 @@ function createCardTexture(variant) {
     ctx.font = '16px system-ui, -apple-system, sans-serif'
     ctx.fillText('iOS app built with a team of three', 30, 172)
 
-    // Divider
     ctx.strokeStyle = '#e5e7eb'
     ctx.lineWidth = 1
     ctx.beginPath()
@@ -158,7 +150,6 @@ function createCardTexture(variant) {
     ctx.lineTo(w - 30, 195)
     ctx.stroke()
 
-    // Body text
     ctx.fillStyle = '#374151'
     ctx.font = '15px system-ui, -apple-system, sans-serif'
     const lines = [
@@ -180,7 +171,6 @@ function createCardTexture(variant) {
       y += 24
     }
 
-    // Stats
     const statsY = y + 20
     ctx.strokeStyle = '#e5e7eb'
     ctx.beginPath()
@@ -204,7 +194,6 @@ function createCardTexture(variant) {
       ctx.fillText(stat.label, sx + 10, statsY + 45)
     })
 
-    // Button
     const btnY = h - 80
     ctx.fillStyle = '#7c3aed'
     ctx.beginPath()
@@ -223,21 +212,19 @@ function createCardTexture(variant) {
 const vertexShader = /* glsl */ `
   #define PI 3.14159265359
 
-  attribute vec3 positionA;
-  attribute vec3 positionB;
-  attribute vec2 aUv;
-  attribute float randomSeed;
-  attribute float swarmSide; // -1 = left swarm, +1 = right swarm
+  // Per-shard attributes
+  attribute vec3 shardCenter;
+  attribute vec3 scatterDir;
+  attribute float delay;
+  attribute float swarmSide; // -1 = left, +1 = right
 
   uniform float uProgress;
   uniform float uTime;
-  uniform float uPointSize;
 
-  varying float vAlpha;
-  varying float vColorMix;
   varying vec2 vUv;
+  varying float vDisplacement;
 
-  // --- Simplex noise ---
+  // Simplex noise
   vec3 mod289(vec3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
   vec2 mod289(vec2 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
   vec3 permute(vec3 x) { return mod289(((x * 34.0) + 1.0) * x); }
@@ -265,221 +252,267 @@ const vertexShader = /* glsl */ `
     return 130.0 * dot(m, g);
   }
 
-  vec2 curlNoise(vec2 p) {
-    float eps = 0.01;
-    float n1 = snoise(vec2(p.x, p.y + eps));
-    float n2 = snoise(vec2(p.x, p.y - eps));
-    float n3 = snoise(vec2(p.x + eps, p.y));
-    float n4 = snoise(vec2(p.x - eps, p.y));
-    return vec2((n1 - n2) / (2.0 * eps), -(n3 - n4) / (2.0 * eps));
+  // Rodrigues rotation
+  vec3 rotateAxis(vec3 v, vec3 axis, float angle) {
+    float c = cos(angle);
+    float s = sin(angle);
+    return v * c + cross(axis, v) * s + axis * dot(axis, v) * (1.0 - c);
   }
 
   void main() {
-    // --- Per-particle stagger ---
-    float delay = randomSeed * 0.2;
+    vUv = uv;
 
-    // Phase 1: Dissolve (0.0 - 0.3)
-    float particleDissolve = smoothstep(delay, delay + 0.25, uProgress);
+    // Per-shard staggered timing
+    float d = clamp(delay, 0.0, 1.0);
 
-    // Phase 3: Reform (0.7 - 1.0)
-    float particleReform = smoothstep(0.72 + (1.0 - randomSeed) * 0.12, 0.97, uProgress);
+    // Dissolve: staggered outward from edges
+    float fractureStart = d * 0.15;
+    float fracture = smoothstep(fractureStart, fractureStart + 0.25, uProgress);
 
-    // Net displacement: 0 at rest, peaks in middle
-    float displacement = particleDissolve * (1.0 - particleReform);
+    // Reform: staggered settle
+    float reformStart = 0.65 + d * 0.18;
+    float reform = smoothstep(reformStart, 0.97, uProgress);
 
-    // Force exact zero at endpoints
-    if (uProgress <= 0.001 || uProgress >= 0.999) {
-      particleDissolve = 0.0;
-      particleReform = 1.0;
-    }
+    // Net displacement
+    float displacement = fracture * (1.0 - reform);
+    if (uProgress <= 0.001 || uProgress >= 0.999) displacement = 0.0;
+    vDisplacement = displacement;
 
-    // Home lerps from A to B
-    vec3 home = mix(positionA, positionB, particleReform);
+    // Local position relative to shard center
+    vec3 localPos = position - shardCenter;
 
-    // --- SWARM BEHAVIOR ---
+    // --- Rotation: tumble while displaced ---
+    float spinRate = 2.0 + d * 3.0;
+    float rotAngle = uTime * spinRate * displacement;
+    vec3 rotAxis = normalize(scatterDir + vec3(0.001));
+    localPos = rotateAxis(localPos, rotAxis, rotAngle);
 
-    // 1. Initial burst: scatter left/right based on swarmSide
-    float burstPhase = smoothstep(0.0, 0.25, particleDissolve);
+    // Secondary slower tumble
+    vec3 rotAxis2 = normalize(cross(rotAxis, vec3(0.0, 1.0, 0.0)) + vec3(0.001));
+    localPos = rotateAxis(localPos, rotAxis2, rotAngle * 0.4);
+
+    // --- Swarm movement ---
+    vec3 offset = vec3(0.0);
+
+    // 1. Initial burst: scatter left/right
+    float burstPhase = smoothstep(0.0, 0.3, fracture);
     vec3 burstDir = vec3(
-      swarmSide * (0.8 + randomSeed * 0.5),  // strong lateral push
-      (randomSeed - 0.5) * 0.4,               // slight vertical spread
-      (sin(randomSeed * 99.0) - 0.5) * 0.3    // slight z spread
+      swarmSide * (1.0 + d * 0.6),
+      scatterDir.y * 0.4,
+      scatterDir.z * 0.3
     );
-    vec3 burstOffset = burstDir * burstPhase * displacement * 2.5;
+    vec3 burstOffset = burstDir * burstPhase * 2.0;
 
-    // 2. Swarm drift: both swarms fly downward together but stay clustered
-    //    Each particle has individual noise but is pulled toward swarm center
-    float driftPhase = smoothstep(0.15, 0.75, uProgress) * (1.0 - smoothstep(0.7, 0.95, uProgress));
+    // 2. Swarm drift downward
+    float driftPhase = smoothstep(0.15, 0.75, uProgress) * (1.0 - smoothstep(0.65, 0.92, uProgress));
 
-    // Swarm center path: goes outward then curves down
-    float swarmCenterX = swarmSide * 3.0 * sin(driftPhase * PI * 0.5); // arc outward
-    float swarmCenterY = -driftPhase * 5.0; // steady downward
-    vec3 swarmCenter = vec3(swarmCenterX, swarmCenterY, 0.0);
+    // Swarm center: arcs outward then down
+    float swarmX = swarmSide * 2.5 * sin(driftPhase * PI * 0.5);
+    float swarmY = -driftPhase * 5.0;
+    vec3 swarmCenter = vec3(swarmX, swarmY, 0.0);
 
-    // Individual particle offset within swarm (firefly jitter)
-    float jitterScale = 0.8 + randomSeed * 0.5;
-    float timeOffset = randomSeed * 50.0;
+    // Per-shard jitter within swarm (firefly feel)
+    float timeOff = d * 50.0;
     vec3 jitter = vec3(
-      sin(uTime * 1.8 + timeOffset) * 0.4 + sin(uTime * 3.1 + timeOffset * 1.3) * 0.2,
-      sin(uTime * 2.2 + timeOffset * 0.7) * 0.3 + cos(uTime * 1.4 + timeOffset) * 0.15,
-      sin(uTime * 1.5 + timeOffset * 1.1) * 0.25
-    ) * jitterScale;
+      sin(uTime * 1.8 + timeOff) * 0.35 + sin(uTime * 3.1 + timeOff * 1.3) * 0.15,
+      sin(uTime * 2.2 + timeOff * 0.7) * 0.25 + cos(uTime * 1.4 + timeOff) * 0.1,
+      sin(uTime * 1.5 + timeOff * 1.1) * 0.2
+    ) * (0.6 + d * 0.5);
 
-    // Curl noise for organic swarm movement
-    vec2 curl = curlNoise(
-      vec2(swarmCenter.x, swarmCenter.y) * 0.3 + uTime * 0.1 + randomSeed * 10.0
-    );
-    vec3 curlOffset = vec3(curl * 0.5, snoise(vec2(randomSeed * 20.0, uTime * 0.2)) * 0.2);
+    // Curl-like noise offset
+    float nx = snoise(vec2(shardCenter.x * 0.5 + uTime * 0.15, shardCenter.y * 0.5));
+    float ny = snoise(vec2(shardCenter.y * 0.5 + uTime * 0.12, shardCenter.x * 0.5 + 100.0));
+    vec3 noiseOff = vec3(nx, ny, 0.0) * 0.4;
 
-    // Combine: particle position = home + burst + swarm drift + jitter + curl
-    vec3 swarmOffset = (swarmCenter + jitter + curlOffset) * displacement;
+    vec3 swarmOffset = (swarmCenter + jitter + noiseOff);
 
-    // Blend between burst (early) and swarm drift (mid) — burst fades into swarm
-    float burstToSwarm = smoothstep(0.15, 0.4, uProgress);
-    vec3 totalOffset = mix(burstOffset, swarmOffset, burstToSwarm);
+    // Blend burst → swarm
+    float burstToSwarm = smoothstep(0.12, 0.35, uProgress);
+    offset = mix(burstOffset, swarmOffset, burstToSwarm) * displacement;
 
-    vec3 pos = home + totalOffset;
+    vec3 finalPos = shardCenter + localPos + offset;
 
-    // --- Particle size ---
-    float scattered = displacement;
-    float size = mix(uPointSize, uPointSize * 0.5, scattered);
-
-    // Slight size variation within swarm for depth
-    size *= 0.7 + randomSeed * 0.6;
-
-    // Fully opaque when formed, slightly transparent when scattered
-    vAlpha = mix(1.0, 0.75, scattered);
-    vColorMix = particleReform;
-    vUv = aUv;
-
-    vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
-    gl_PointSize = size * (300.0 / -mvPosition.z);
-    gl_Position = projectionMatrix * mvPosition;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(finalPos, 1.0);
   }
 `
 
 const fragmentShader = /* glsl */ `
   #define PI 3.14159265359
-
   precision highp float;
 
   uniform sampler2D uTextureA;
   uniform sampler2D uTextureB;
+  uniform float uProgress;
 
-  varying float vAlpha;
-  varying float vColorMix;
   varying vec2 vUv;
+  varying float vDisplacement;
 
   void main() {
-    float d = length(gl_PointCoord - 0.5);
-    if (d > 0.5) discard;
-    float alpha = smoothstep(0.5, 0.15, d) * vAlpha;
-
+    // Blend between textures based on progress
+    // Card A at start, Card B at end, crossfade in middle
+    float texMix = smoothstep(0.35, 0.65, uProgress);
     vec3 colorA = texture2D(uTextureA, vUv).rgb;
     vec3 colorB = texture2D(uTextureB, vUv).rgb;
-    vec3 color = mix(colorA, colorB, vColorMix);
+    vec3 color = mix(colorA, colorB, texMix);
 
-    gl_FragColor = vec4(color, alpha);
+    // Subtle edge darkening on displaced shards
+    color *= 1.0 - vDisplacement * 0.1;
+
+    gl_FragColor = vec4(color, 1.0);
   }
 `
 
-// Crisp card plane — full-res texture, fades out as particles take over
-const cardVertexShader = /* glsl */ `
-  varying vec2 vUv;
-  void main() {
-    vUv = uv;
-    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-  }
-`
+function seededRandom(seed) {
+  const x = Math.sin(seed * 127.1 + 311.7) * 43758.5453
+  return x - Math.floor(x)
+}
 
-const cardFragmentShader = /* glsl */ `
-  precision highp float;
-  uniform sampler2D uTexture;
-  uniform float uOpacity;
-  varying vec2 vUv;
-  void main() {
-    vec4 tex = texture2D(uTexture, vUv);
-    gl_FragColor = vec4(tex.rgb, uOpacity);
-  }
-`
+function buildShardGeometry() {
+  const plane = new THREE.PlaneGeometry(CARD_WIDTH, CARD_HEIGHT, SUBDIVS_X, SUBDIVS_Y)
+  const posAttr = plane.getAttribute('position')
+  const uvAttr = plane.getAttribute('uv')
+  const index = plane.getIndex()
 
-function ImageParticleScene() {
-  const particlesRef = useRef()
-  const cardARef = useRef()
-  const cardBRef = useRef()
+  const origTriCount = index.count / 3
+  const N = SHARD_SUBDIVS
+  const subsPerShard = N * N
+  const vertsPerShard = subsPerShard * 3
+  const totalVerts = origTriCount * vertsPerShard
+
+  const positions = new Float32Array(totalVerts * 3)
+  const uvs = new Float32Array(totalVerts * 2)
+  const shardCenters = new Float32Array(totalVerts * 3)
+  const scatterDirs = new Float32Array(totalVerts * 3)
+  const delays = new Float32Array(totalVerts)
+  const swarmSides = new Float32Array(totalVerts)
+
+  let vi = 0
+
+  for (let tri = 0; tri < origTriCount; tri++) {
+    const i0 = index.getX(tri * 3)
+    const i1 = index.getX(tri * 3 + 1)
+    const i2 = index.getX(tri * 3 + 2)
+
+    const p0 = [posAttr.getX(i0), posAttr.getY(i0), posAttr.getZ(i0)]
+    const p1 = [posAttr.getX(i1), posAttr.getY(i1), posAttr.getZ(i1)]
+    const p2 = [posAttr.getX(i2), posAttr.getY(i2), posAttr.getZ(i2)]
+    const u0 = [uvAttr.getX(i0), uvAttr.getY(i0)]
+    const u1 = [uvAttr.getX(i1), uvAttr.getY(i1)]
+    const u2 = [uvAttr.getX(i2), uvAttr.getY(i2)]
+
+    const centerX = (p0[0] + p1[0] + p2[0]) / 3
+    const centerY = (p0[1] + p1[1] + p2[1]) / 3
+    const centerZ = 0
+
+    const seed = tri * 7.31
+
+    // Scatter direction: mostly outward from center
+    const outX = centerX / (CARD_WIDTH * 0.5)
+    const outY = centerY / (CARD_HEIGHT * 0.5)
+    const scX = outX + (seededRandom(seed + 1) - 0.5) * 0.5
+    const scY = outY + (seededRandom(seed + 2) - 0.5) * 0.5
+    const scZ = (seededRandom(seed + 3) - 0.5) * 0.4
+    const scLen = Math.sqrt(scX * scX + scY * scY + scZ * scZ) || 1
+
+    // Delay: edge shards fracture first, center last
+    const distFromCenter = Math.sqrt(centerX * centerX + centerY * centerY)
+    const maxDist = Math.sqrt((CARD_WIDTH / 2) ** 2 + (CARD_HEIGHT / 2) ** 2)
+    const normalizedDist = distFromCenter / maxDist
+    const delayVal = Math.min(1.0, Math.max(0.0, 1.0 - normalizedDist + seededRandom(seed + 4) * 0.2))
+
+    // Swarm side: based on x position with some randomness
+    const sideBias = centerX / (CARD_WIDTH * 0.5) * 3.0 + (seededRandom(seed + 5) - 0.5) * 0.6
+    const side = sideBias > 0 ? 1.0 : -1.0
+
+    function baryPos(a, b) {
+      const c = N - a - b
+      const t0 = a / N, t1 = b / N, t2 = c / N
+      return [
+        t0 * p0[0] + t1 * p1[0] + t2 * p2[0],
+        t0 * p0[1] + t1 * p1[1] + t2 * p2[1],
+        t0 * p0[2] + t1 * p1[2] + t2 * p2[2],
+      ]
+    }
+    function baryUV(a, b) {
+      const c = N - a - b
+      const t0 = a / N, t1 = b / N, t2 = c / N
+      return [
+        t0 * u0[0] + t1 * u1[0] + t2 * u2[0],
+        t0 * u0[1] + t1 * u1[1] + t2 * u2[1],
+      ]
+    }
+
+    function addVertex(a, b) {
+      const pos = baryPos(a, b)
+      const uv = baryUV(a, b)
+
+      positions[vi * 3] = pos[0]
+      positions[vi * 3 + 1] = pos[1]
+      positions[vi * 3 + 2] = pos[2]
+
+      uvs[vi * 2] = uv[0]
+      uvs[vi * 2 + 1] = uv[1]
+
+      shardCenters[vi * 3] = centerX
+      shardCenters[vi * 3 + 1] = centerY
+      shardCenters[vi * 3 + 2] = centerZ
+
+      scatterDirs[vi * 3] = scX / scLen
+      scatterDirs[vi * 3 + 1] = scY / scLen
+      scatterDirs[vi * 3 + 2] = scZ / scLen
+
+      delays[vi] = delayVal
+      swarmSides[vi] = side
+
+      vi++
+    }
+
+    for (let a = 0; a < N; a++) {
+      for (let b = 0; b < N - a; b++) {
+        addVertex(a, b)
+        addVertex(a + 1, b)
+        addVertex(a, b + 1)
+
+        if (a + b < N - 1) {
+          addVertex(a + 1, b)
+          addVertex(a + 1, b + 1)
+          addVertex(a, b + 1)
+        }
+      }
+    }
+  }
+
+  const geo = new THREE.BufferGeometry()
+  geo.setAttribute('position', new THREE.BufferAttribute(positions, 3))
+  geo.setAttribute('uv', new THREE.BufferAttribute(uvs, 2))
+  geo.setAttribute('shardCenter', new THREE.BufferAttribute(shardCenters, 3))
+  geo.setAttribute('scatterDir', new THREE.BufferAttribute(scatterDirs, 3))
+  geo.setAttribute('delay', new THREE.BufferAttribute(delays, 1))
+  geo.setAttribute('swarmSide', new THREE.BufferAttribute(swarmSides, 1))
+
+  plane.dispose()
+  return geo
+}
+
+function ShardScene() {
+  const meshRef = useRef()
   const scroll = useScroll()
   const { camera } = useThree()
   const initialCamY = useRef(null)
-
-  // Card dimensions
-  const cardWidth = 4.0
-  const cardHeight = 5.0
 
   const textures = useMemo(() => ({
     A: createCardTexture('A'),
     B: createCardTexture('B'),
   }), [])
 
-  // Card A material uniforms
-  const cardAUniforms = useMemo(() => ({
-    uTexture: { value: textures.A },
-    uOpacity: { value: 1.0 },
-  }), [textures])
-
-  // Card B material uniforms
-  const cardBUniforms = useMemo(() => ({
-    uTexture: { value: textures.B },
-    uOpacity: { value: 0.0 },
-  }), [textures])
-
   const { geometry, uniforms } = useMemo(() => {
-    const posA = new Float32Array(PARTICLE_COUNT * 3)
-    const posB = new Float32Array(PARTICLE_COUNT * 3)
-    const uvs = new Float32Array(PARTICLE_COUNT * 2)
-    const seeds = new Float32Array(PARTICLE_COUNT)
-    const swarmSides = new Float32Array(PARTICLE_COUNT)
-
-    for (let row = 0; row < GRID_ROWS; row++) {
-      for (let col = 0; col < GRID_COLS; col++) {
-        const idx = row * GRID_COLS + col
-        const u = col / (GRID_COLS - 1)
-        const v = row / (GRID_ROWS - 1)
-
-        posA[idx * 3]     = (u - 0.5) * cardWidth
-        posA[idx * 3 + 1] = (0.5 - v) * cardHeight
-        posA[idx * 3 + 2] = 0
-
-        posB[idx * 3]     = (u - 0.5) * cardWidth
-        posB[idx * 3 + 1] = (0.5 - v) * cardHeight
-        posB[idx * 3 + 2] = 0
-
-        uvs[idx * 2]     = u
-        uvs[idx * 2 + 1] = 1.0 - v
-
-        seeds[idx] = Math.random()
-
-        const centerBias = (u - 0.5) * 4.0
-        const noise = (Math.random() - 0.5) * 0.8
-        swarmSides[idx] = (centerBias + noise) > 0 ? 1.0 : -1.0
-      }
-    }
-
-    const geo = new THREE.BufferGeometry()
-    geo.setAttribute('position', new THREE.BufferAttribute(posA.slice(), 3))
-    geo.setAttribute('positionA', new THREE.BufferAttribute(posA, 3))
-    geo.setAttribute('positionB', new THREE.BufferAttribute(posB, 3))
-    geo.setAttribute('aUv', new THREE.BufferAttribute(uvs, 2))
-    geo.setAttribute('randomSeed', new THREE.BufferAttribute(seeds, 1))
-    geo.setAttribute('swarmSide', new THREE.BufferAttribute(swarmSides, 1))
-
+    const geo = buildShardGeometry()
     const unis = {
       uProgress: { value: 0 },
       uTime: { value: 0 },
-      uPointSize: { value: 5.0 },
       uTextureA: { value: textures.A },
       uTextureB: { value: textures.B },
     }
-
     return { geometry: geo, uniforms: unis }
   }, [textures])
 
@@ -492,7 +525,7 @@ function ImageParticleScene() {
   }, [textures, geometry])
 
   useFrame(({ clock }) => {
-    if (!particlesRef.current) return
+    if (!meshRef.current) return
 
     if (initialCamY.current === null) {
       initialCamY.current = camera.position.y
@@ -502,21 +535,7 @@ function ImageParticleScene() {
     uniforms.uProgress.value = progress
     uniforms.uTime.value = clock.getElapsedTime()
 
-    // Card A: fully visible at start, fades out as dissolve begins
-    const cardAOpacity = 1.0 - smoothstep(0.02, 0.15, progress)
-    cardAUniforms.uOpacity.value = cardAOpacity
-    if (cardARef.current) cardARef.current.visible = cardAOpacity > 0.001
-
-    // Card B: fades in as reform completes
-    const cardBOpacity = smoothstep(0.85, 0.98, progress)
-    cardBUniforms.uOpacity.value = cardBOpacity
-    if (cardBRef.current) cardBRef.current.visible = cardBOpacity > 0.001
-
-    // Particles: visible only during transition
-    const particleOpacity = smoothstep(0.02, 0.12, progress) * (1.0 - smoothstep(0.88, 0.98, progress))
-    if (particlesRef.current) particlesRef.current.visible = particleOpacity > 0.001
-
-    // Camera follows swarms downward, returns for reform
+    // Camera follows shards downward, returns for reform
     const followIn = smoothstep(0.15, 0.4, progress)
     const followOut = smoothstep(0.65, 0.95, progress)
     const cameraOffset = followIn * (1.0 - followOut) * 5.0
@@ -524,40 +543,14 @@ function ImageParticleScene() {
   })
 
   return (
-    <>
-      {/* Crisp card A — visible at start, fades out */}
-      <mesh ref={cardARef} position={[0, 0, 0.01]}>
-        <planeGeometry args={[cardWidth, cardHeight]} />
-        <shaderMaterial
-          vertexShader={cardVertexShader}
-          fragmentShader={cardFragmentShader}
-          uniforms={cardAUniforms}
-          transparent
-        />
-      </mesh>
-
-      {/* Crisp card B — fades in at end */}
-      <mesh ref={cardBRef} position={[0, 0, 0.01]} visible={false}>
-        <planeGeometry args={[cardWidth, cardHeight]} />
-        <shaderMaterial
-          vertexShader={cardVertexShader}
-          fragmentShader={cardFragmentShader}
-          uniforms={cardBUniforms}
-          transparent
-        />
-      </mesh>
-
-      {/* Particles — visible during transition */}
-      <points ref={particlesRef} geometry={geometry}>
-        <shaderMaterial
-          vertexShader={vertexShader}
-          fragmentShader={fragmentShader}
-          uniforms={uniforms}
-          transparent
-          depthWrite={false}
-        />
-      </points>
-    </>
+    <mesh ref={meshRef} geometry={geometry}>
+      <shaderMaterial
+        vertexShader={vertexShader}
+        fragmentShader={fragmentShader}
+        uniforms={uniforms}
+        side={THREE.DoubleSide}
+      />
+    </mesh>
   )
 }
 
@@ -566,7 +559,7 @@ export default function ImageToParticles() {
     <>
       <color attach="background" args={['#0a0a0a']} />
       <ScrollControls pages={3} damping={0.15}>
-        <ImageParticleScene />
+        <ShardScene />
       </ScrollControls>
     </>
   )
