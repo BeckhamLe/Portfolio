@@ -347,7 +347,8 @@ const vertexShader = /* glsl */ `
     // Slight size variation within swarm for depth
     size *= 0.7 + randomSeed * 0.6;
 
-    vAlpha = mix(1.0, 0.65, scattered * 0.5);
+    // Fully opaque when formed, slightly transparent when scattered
+    vAlpha = mix(1.0, 0.75, scattered);
     vColorMix = particleReform;
     vUv = aUv;
 
@@ -378,30 +379,60 @@ const fragmentShader = /* glsl */ `
     vec3 colorB = texture2D(uTextureB, vUv).rgb;
     vec3 color = mix(colorA, colorB, vColorMix);
 
-    // Subtle glow at center of each particle
-    float glow = smoothstep(0.4, 0.0, d) * 0.15;
-    color += glow;
-
     gl_FragColor = vec4(color, alpha);
   }
 `
 
+// Crisp card plane — full-res texture, fades out as particles take over
+const cardVertexShader = /* glsl */ `
+  varying vec2 vUv;
+  void main() {
+    vUv = uv;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  }
+`
+
+const cardFragmentShader = /* glsl */ `
+  precision highp float;
+  uniform sampler2D uTexture;
+  uniform float uOpacity;
+  varying vec2 vUv;
+  void main() {
+    vec4 tex = texture2D(uTexture, vUv);
+    gl_FragColor = vec4(tex.rgb, uOpacity);
+  }
+`
+
 function ImageParticleScene() {
-  const meshRef = useRef()
+  const particlesRef = useRef()
+  const cardARef = useRef()
+  const cardBRef = useRef()
   const scroll = useScroll()
   const { camera } = useThree()
   const initialCamY = useRef(null)
+
+  // Card dimensions
+  const cardWidth = 4.0
+  const cardHeight = 5.0
 
   const textures = useMemo(() => ({
     A: createCardTexture('A'),
     B: createCardTexture('B'),
   }), [])
 
-  const { geometry, uniforms } = useMemo(() => {
-    // Card dimensions in world space (matching 800:1000 aspect = 0.8:1)
-    const cardWidth = 4.0
-    const cardHeight = 5.0
+  // Card A material uniforms
+  const cardAUniforms = useMemo(() => ({
+    uTexture: { value: textures.A },
+    uOpacity: { value: 1.0 },
+  }), [textures])
 
+  // Card B material uniforms
+  const cardBUniforms = useMemo(() => ({
+    uTexture: { value: textures.B },
+    uOpacity: { value: 0.0 },
+  }), [textures])
+
+  const { geometry, uniforms } = useMemo(() => {
     const posA = new Float32Array(PARTICLE_COUNT * 3)
     const posB = new Float32Array(PARTICLE_COUNT * 3)
     const uvs = new Float32Array(PARTICLE_COUNT * 2)
@@ -414,26 +445,21 @@ function ImageParticleScene() {
         const u = col / (GRID_COLS - 1)
         const v = row / (GRID_ROWS - 1)
 
-        // Position A: card centered at origin
         posA[idx * 3]     = (u - 0.5) * cardWidth
         posA[idx * 3 + 1] = (0.5 - v) * cardHeight
         posA[idx * 3 + 2] = 0
 
-        // Position B: same layout, same center (camera handles the transition)
         posB[idx * 3]     = (u - 0.5) * cardWidth
         posB[idx * 3 + 1] = (0.5 - v) * cardHeight
         posB[idx * 3 + 2] = 0
 
-        // UV (flip V for canvas top-left origin)
         uvs[idx * 2]     = u
         uvs[idx * 2 + 1] = 1.0 - v
 
         seeds[idx] = Math.random()
 
-        // Swarm side: left half of card → left swarm (-1), right half → right swarm (+1)
-        // Add some randomness at the center so the split isn't a hard line
-        const centerBias = (u - 0.5) * 4.0 // strong left/right signal
-        const noise = (Math.random() - 0.5) * 0.8 // some randomness
+        const centerBias = (u - 0.5) * 4.0
+        const noise = (Math.random() - 0.5) * 0.8
         swarmSides[idx] = (centerBias + noise) > 0 ? 1.0 : -1.0
       }
     }
@@ -449,7 +475,7 @@ function ImageParticleScene() {
     const unis = {
       uProgress: { value: 0 },
       uTime: { value: 0 },
-      uPointSize: { value: 4.0 },
+      uPointSize: { value: 5.0 },
       uTextureA: { value: textures.A },
       uTextureB: { value: textures.B },
     }
@@ -466,9 +492,8 @@ function ImageParticleScene() {
   }, [textures, geometry])
 
   useFrame(({ clock }) => {
-    if (!meshRef.current) return
+    if (!particlesRef.current) return
 
-    // Capture initial camera Y on first frame
     if (initialCamY.current === null) {
       initialCamY.current = camera.position.y
     }
@@ -477,8 +502,21 @@ function ImageParticleScene() {
     uniforms.uProgress.value = progress
     uniforms.uTime.value = clock.getElapsedTime()
 
+    // Card A: fully visible at start, fades out as dissolve begins
+    const cardAOpacity = 1.0 - smoothstep(0.02, 0.15, progress)
+    cardAUniforms.uOpacity.value = cardAOpacity
+    if (cardARef.current) cardARef.current.visible = cardAOpacity > 0.001
+
+    // Card B: fades in as reform completes
+    const cardBOpacity = smoothstep(0.85, 0.98, progress)
+    cardBUniforms.uOpacity.value = cardBOpacity
+    if (cardBRef.current) cardBRef.current.visible = cardBOpacity > 0.001
+
+    // Particles: visible only during transition
+    const particleOpacity = smoothstep(0.02, 0.12, progress) * (1.0 - smoothstep(0.88, 0.98, progress))
+    if (particlesRef.current) particlesRef.current.visible = particleOpacity > 0.001
+
     // Camera follows swarms downward, returns for reform
-    // Bell curve: ease into follow during dissolve, ease back during reform
     const followIn = smoothstep(0.15, 0.4, progress)
     const followOut = smoothstep(0.65, 0.95, progress)
     const cameraOffset = followIn * (1.0 - followOut) * 5.0
@@ -486,16 +524,40 @@ function ImageParticleScene() {
   })
 
   return (
-    <points ref={meshRef} geometry={geometry}>
-      <shaderMaterial
-        vertexShader={vertexShader}
-        fragmentShader={fragmentShader}
-        uniforms={uniforms}
-        transparent
-        depthWrite={false}
-        blending={THREE.AdditiveBlending}
-      />
-    </points>
+    <>
+      {/* Crisp card A — visible at start, fades out */}
+      <mesh ref={cardARef} position={[0, 0, 0.01]}>
+        <planeGeometry args={[cardWidth, cardHeight]} />
+        <shaderMaterial
+          vertexShader={cardVertexShader}
+          fragmentShader={cardFragmentShader}
+          uniforms={cardAUniforms}
+          transparent
+        />
+      </mesh>
+
+      {/* Crisp card B — fades in at end */}
+      <mesh ref={cardBRef} position={[0, 0, 0.01]} visible={false}>
+        <planeGeometry args={[cardWidth, cardHeight]} />
+        <shaderMaterial
+          vertexShader={cardVertexShader}
+          fragmentShader={cardFragmentShader}
+          uniforms={cardBUniforms}
+          transparent
+        />
+      </mesh>
+
+      {/* Particles — visible during transition */}
+      <points ref={particlesRef} geometry={geometry}>
+        <shaderMaterial
+          vertexShader={vertexShader}
+          fragmentShader={fragmentShader}
+          uniforms={uniforms}
+          transparent
+          depthWrite={false}
+        />
+      </points>
+    </>
   )
 }
 
