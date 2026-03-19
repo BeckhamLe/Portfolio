@@ -3,9 +3,222 @@ import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { ScrollControls, useScroll } from '@react-three/drei'
 
-const PARTICLE_COUNT = 10000
 const GRID_COLS = 100
 const GRID_ROWS = 100
+const PARTICLE_COUNT = GRID_COLS * GRID_ROWS
+
+// JS smoothstep for camera follow
+function smoothstep(edge0, edge1, x) {
+  const t = Math.max(0, Math.min(1, (x - edge0) / (edge1 - edge0)))
+  return t * t * (3 - 2 * t)
+}
+
+// Card texture matching ScrollVelocitySmear style — readable content card
+function createCardTexture(variant) {
+  const canvas = document.createElement('canvas')
+  const w = 800
+  const h = 1000
+  canvas.width = w
+  canvas.height = h
+  const ctx = canvas.getContext('2d')
+
+  // White card background with rounded corners
+  ctx.fillStyle = '#ffffff'
+  ctx.beginPath()
+  ctx.roundRect(0, 0, w, h, 16)
+  ctx.fill()
+
+  if (variant === 'A') {
+    // Blue header
+    ctx.fillStyle = '#2563eb'
+    ctx.beginPath()
+    ctx.roundRect(0, 0, w, 80, [16, 16, 0, 0])
+    ctx.fill()
+
+    ctx.fillStyle = '#ffffff'
+    ctx.font = 'bold 24px system-ui, -apple-system, sans-serif'
+    ctx.fillText('Presentation Builder', 30, 50)
+
+    // Avatar
+    ctx.fillStyle = '#e0e7ff'
+    ctx.beginPath()
+    ctx.arc(w - 55, 40, 22, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.fillStyle = '#6366f1'
+    ctx.font = 'bold 18px system-ui'
+    ctx.fillText('BL', w - 67, 46)
+
+    // Title
+    ctx.fillStyle = '#111827'
+    ctx.font = 'bold 28px system-ui, -apple-system, sans-serif'
+    ctx.fillText('AI-Powered Slide Generation', 30, 140)
+
+    ctx.fillStyle = '#6b7280'
+    ctx.font = '16px system-ui, -apple-system, sans-serif'
+    ctx.fillText('Conversational presentation design tool', 30, 172)
+
+    // Divider
+    ctx.strokeStyle = '#e5e7eb'
+    ctx.lineWidth = 1
+    ctx.beginPath()
+    ctx.moveTo(30, 195)
+    ctx.lineTo(w - 30, 195)
+    ctx.stroke()
+
+    // Body text
+    ctx.fillStyle = '#374151'
+    ctx.font = '15px system-ui, -apple-system, sans-serif'
+    const lines = [
+      'A chatbot that focuses on conversation first —',
+      'clarifying your messy presentation idea into a',
+      'concrete structure before generating any slides.',
+      '',
+      'The AI asks targeted questions to understand your',
+      'audience, key messages, and desired outcomes. Only',
+      'then does it generate slides with critical content,',
+      'not filler text.',
+      '',
+      'Built with React, Claude API, and real-time',
+      'collaboration features.',
+    ]
+    let y = 225
+    for (const line of lines) {
+      if (line === '') { y += 10; continue }
+      ctx.fillText(line, 30, y)
+      y += 24
+    }
+
+    // Stats
+    const statsY = y + 20
+    ctx.strokeStyle = '#e5e7eb'
+    ctx.beginPath()
+    ctx.moveTo(30, statsY - 10)
+    ctx.lineTo(w - 30, statsY - 10)
+    ctx.stroke()
+
+    const stats = [
+      { label: 'Slides', value: '∞' },
+      { label: 'AI Model', value: 'Claude' },
+      { label: 'Status', value: 'Live' },
+    ]
+    const statWidth = (w - 60) / stats.length
+    stats.forEach((stat, i) => {
+      const sx = 30 + i * statWidth
+      ctx.fillStyle = '#111827'
+      ctx.font = 'bold 24px system-ui'
+      ctx.fillText(stat.value, sx + 10, statsY + 25)
+      ctx.fillStyle = '#9ca3af'
+      ctx.font = '13px system-ui'
+      ctx.fillText(stat.label, sx + 10, statsY + 45)
+    })
+
+    // Button
+    const btnY = h - 80
+    ctx.fillStyle = '#2563eb'
+    ctx.beginPath()
+    ctx.roundRect(30, btnY, 180, 44, 8)
+    ctx.fill()
+    ctx.fillStyle = '#ffffff'
+    ctx.font = 'bold 15px system-ui'
+    ctx.fillText('Try It Out →', 62, btnY + 28)
+  } else {
+    // Purple header for variant B
+    ctx.fillStyle = '#7c3aed'
+    ctx.beginPath()
+    ctx.roundRect(0, 0, w, 80, [16, 16, 0, 0])
+    ctx.fill()
+
+    ctx.fillStyle = '#ffffff'
+    ctx.font = 'bold 24px system-ui, -apple-system, sans-serif'
+    ctx.fillText('AR Scavenger Hunt', 30, 50)
+
+    // Avatar
+    ctx.fillStyle = '#ede9fe'
+    ctx.beginPath()
+    ctx.arc(w - 55, 40, 22, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.fillStyle = '#7c3aed'
+    ctx.font = 'bold 18px system-ui'
+    ctx.fillText('AR', w - 68, 46)
+
+    // Title
+    ctx.fillStyle = '#111827'
+    ctx.font = 'bold 28px system-ui, -apple-system, sans-serif'
+    ctx.fillText('Location-Based AR Game', 30, 140)
+
+    ctx.fillStyle = '#6b7280'
+    ctx.font = '16px system-ui, -apple-system, sans-serif'
+    ctx.fillText('iOS app built with a team of three', 30, 172)
+
+    // Divider
+    ctx.strokeStyle = '#e5e7eb'
+    ctx.lineWidth = 1
+    ctx.beginPath()
+    ctx.moveTo(30, 195)
+    ctx.lineTo(w - 30, 195)
+    ctx.stroke()
+
+    // Body text
+    ctx.fillStyle = '#374151'
+    ctx.font = '15px system-ui, -apple-system, sans-serif'
+    const lines = [
+      'An augmented reality scavenger hunt game where',
+      'players explore real-world locations to discover',
+      'hidden AR objects and solve clues.',
+      '',
+      'Built collaboratively with two peers in the',
+      'Fractal bootcamp program. Currently in the final',
+      'stages of App Store deployment.',
+      '',
+      'Features real-time multiplayer, location tracking,',
+      'and persistent game state across sessions.',
+    ]
+    let y = 225
+    for (const line of lines) {
+      if (line === '') { y += 10; continue }
+      ctx.fillText(line, 30, y)
+      y += 24
+    }
+
+    // Stats
+    const statsY = y + 20
+    ctx.strokeStyle = '#e5e7eb'
+    ctx.beginPath()
+    ctx.moveTo(30, statsY - 10)
+    ctx.lineTo(w - 30, statsY - 10)
+    ctx.stroke()
+
+    const stats = [
+      { label: 'Platform', value: 'iOS' },
+      { label: 'Team', value: '3 devs' },
+      { label: 'Status', value: 'Beta' },
+    ]
+    const statWidth = (w - 60) / stats.length
+    stats.forEach((stat, i) => {
+      const sx = 30 + i * statWidth
+      ctx.fillStyle = '#111827'
+      ctx.font = 'bold 24px system-ui'
+      ctx.fillText(stat.value, sx + 10, statsY + 25)
+      ctx.fillStyle = '#9ca3af'
+      ctx.font = '13px system-ui'
+      ctx.fillText(stat.label, sx + 10, statsY + 45)
+    })
+
+    // Button
+    const btnY = h - 80
+    ctx.fillStyle = '#7c3aed'
+    ctx.beginPath()
+    ctx.roundRect(30, btnY, 180, 44, 8)
+    ctx.fill()
+    ctx.fillStyle = '#ffffff'
+    ctx.font = 'bold 15px system-ui'
+    ctx.fillText('View Project →', 55, btnY + 28)
+  }
+
+  const texture = new THREE.CanvasTexture(canvas)
+  texture.needsUpdate = true
+  return texture
+}
 
 const vertexShader = /* glsl */ `
   #define PI 3.14159265359
@@ -14,6 +227,7 @@ const vertexShader = /* glsl */ `
   attribute vec3 positionB;
   attribute vec2 aUv;
   attribute float randomSeed;
+  attribute float swarmSide; // -1 = left swarm, +1 = right swarm
 
   uniform float uProgress;
   uniform float uTime;
@@ -21,9 +235,9 @@ const vertexShader = /* glsl */ `
 
   varying float vAlpha;
   varying float vColorMix;
-  varying float vRandomSeed;
   varying vec2 vUv;
 
+  // --- Simplex noise ---
   vec3 mod289(vec3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
   vec2 mod289(vec2 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
   vec3 permute(vec3 x) { return mod289(((x * 34.0) + 1.0) * x); }
@@ -61,47 +275,80 @@ const vertexShader = /* glsl */ `
   }
 
   void main() {
-    // Staggered per-particle timing
+    // --- Per-particle stagger ---
     float delay = randomSeed * 0.2;
 
-    // Phase 1: Dissolve from image A (0.0 - 0.3)
-    float particleDissolve = smoothstep(delay, delay + 0.3, uProgress);
+    // Phase 1: Dissolve (0.0 - 0.3)
+    float particleDissolve = smoothstep(delay, delay + 0.25, uProgress);
 
-    // Phase 3: Reform into image B (0.7 - 1.0)
-    float particleReform = smoothstep(0.7 + (1.0 - randomSeed) * 0.15, 0.98, uProgress);
+    // Phase 3: Reform (0.7 - 1.0)
+    float particleReform = smoothstep(0.72 + (1.0 - randomSeed) * 0.12, 0.97, uProgress);
 
-    // Drift factor peaks in the middle
-    float drift = smoothstep(0.2, 0.5, uProgress) * (1.0 - smoothstep(0.7, 0.95, uProgress));
+    // Net displacement: 0 at rest, peaks in middle
+    float displacement = particleDissolve * (1.0 - particleReform);
 
-    // Home position lerps from A to B as reform kicks in
+    // Force exact zero at endpoints
+    if (uProgress <= 0.001 || uProgress >= 0.999) {
+      particleDissolve = 0.0;
+      particleReform = 1.0;
+    }
+
+    // Home lerps from A to B
     vec3 home = mix(positionA, positionB, particleReform);
 
-    // Scatter direction — biased downward toward positionB
-    vec3 scatterDir = normalize(vec3(
-      sin(randomSeed * 123.4) * 0.4,
-      -0.8 + cos(randomSeed * 456.7) * 0.3,
-      sin(randomSeed * 789.0) * 0.2
-    ));
-    float scatterDist = (0.3 + randomSeed * 1.2) * particleDissolve * (1.0 - particleReform);
+    // --- SWARM BEHAVIOR ---
 
-    // Curl noise for organic drift
-    vec2 curl = curlNoise(home.xy * 0.8 + uTime * 0.15 + randomSeed * 10.0);
-    vec3 curlOffset = vec3(curl * 0.6, snoise(home.xy * 0.5 + uTime * 0.1) * 0.2);
-    float curlStrength = sin(drift * PI) * (1.0 - particleReform);
+    // 1. Initial burst: scatter left/right based on swarmSide
+    float burstPhase = smoothstep(0.0, 0.25, particleDissolve);
+    vec3 burstDir = vec3(
+      swarmSide * (0.8 + randomSeed * 0.5),  // strong lateral push
+      (randomSeed - 0.5) * 0.4,               // slight vertical spread
+      (sin(randomSeed * 99.0) - 0.5) * 0.3    // slight z spread
+    );
+    vec3 burstOffset = burstDir * burstPhase * displacement * 2.5;
 
-    // Gravity-like downward pull during drift
-    float gravityPull = drift * 1.5 * (1.0 - particleReform);
+    // 2. Swarm drift: both swarms fly downward together but stay clustered
+    //    Each particle has individual noise but is pulled toward swarm center
+    float driftPhase = smoothstep(0.15, 0.75, uProgress) * (1.0 - smoothstep(0.7, 0.95, uProgress));
 
-    vec3 pos = home + scatterDir * scatterDist + curlOffset * curlStrength;
-    pos.y -= gravityPull * (0.5 + randomSeed * 0.5);
+    // Swarm center path: goes outward then curves down
+    float swarmCenterX = swarmSide * 3.0 * sin(driftPhase * PI * 0.5); // arc outward
+    float swarmCenterY = -driftPhase * 5.0; // steady downward
+    vec3 swarmCenter = vec3(swarmCenterX, swarmCenterY, 0.0);
 
-    // Particle size — smaller when scattered
-    float scattered = particleDissolve * (1.0 - particleReform);
-    float size = mix(uPointSize, uPointSize * 0.4, scattered);
+    // Individual particle offset within swarm (firefly jitter)
+    float jitterScale = 0.8 + randomSeed * 0.5;
+    float timeOffset = randomSeed * 50.0;
+    vec3 jitter = vec3(
+      sin(uTime * 1.8 + timeOffset) * 0.4 + sin(uTime * 3.1 + timeOffset * 1.3) * 0.2,
+      sin(uTime * 2.2 + timeOffset * 0.7) * 0.3 + cos(uTime * 1.4 + timeOffset) * 0.15,
+      sin(uTime * 1.5 + timeOffset * 1.1) * 0.25
+    ) * jitterScale;
 
-    vAlpha = mix(1.0, 0.6, scattered * 0.5);
+    // Curl noise for organic swarm movement
+    vec2 curl = curlNoise(
+      vec2(swarmCenter.x, swarmCenter.y) * 0.3 + uTime * 0.1 + randomSeed * 10.0
+    );
+    vec3 curlOffset = vec3(curl * 0.5, snoise(vec2(randomSeed * 20.0, uTime * 0.2)) * 0.2);
+
+    // Combine: particle position = home + burst + swarm drift + jitter + curl
+    vec3 swarmOffset = (swarmCenter + jitter + curlOffset) * displacement;
+
+    // Blend between burst (early) and swarm drift (mid) — burst fades into swarm
+    float burstToSwarm = smoothstep(0.15, 0.4, uProgress);
+    vec3 totalOffset = mix(burstOffset, swarmOffset, burstToSwarm);
+
+    vec3 pos = home + totalOffset;
+
+    // --- Particle size ---
+    float scattered = displacement;
+    float size = mix(uPointSize, uPointSize * 0.5, scattered);
+
+    // Slight size variation within swarm for depth
+    size *= 0.7 + randomSeed * 0.6;
+
+    vAlpha = mix(1.0, 0.65, scattered * 0.5);
     vColorMix = particleReform;
-    vRandomSeed = randomSeed;
     vUv = aUv;
 
     vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
@@ -120,7 +367,6 @@ const fragmentShader = /* glsl */ `
 
   varying float vAlpha;
   varying float vColorMix;
-  varying float vRandomSeed;
   varying vec2 vUv;
 
   void main() {
@@ -132,185 +378,63 @@ const fragmentShader = /* glsl */ `
     vec3 colorB = texture2D(uTextureB, vUv).rgb;
     vec3 color = mix(colorA, colorB, vColorMix);
 
-    // Subtle glow
-    float glow = smoothstep(0.4, 0.0, d) * 0.2;
+    // Subtle glow at center of each particle
+    float glow = smoothstep(0.4, 0.0, d) * 0.15;
     color += glow;
 
     gl_FragColor = vec4(color, alpha);
   }
 `
 
-function createCanvasTexture(type) {
-  const canvas = document.createElement('canvas')
-  canvas.width = 512
-  canvas.height = 512
-  const ctx = canvas.getContext('2d')
-
-  if (type === 'A') {
-    // Blue/teal gradient background
-    const grad = ctx.createLinearGradient(0, 0, 512, 512)
-    grad.addColorStop(0, '#0a2a3a')
-    grad.addColorStop(0.5, '#0d4f5f')
-    grad.addColorStop(1, '#1a6b7a')
-    ctx.fillStyle = grad
-    ctx.fillRect(0, 0, 512, 512)
-
-    // Geometric shapes — circles
-    ctx.strokeStyle = 'rgba(100, 220, 255, 0.4)'
-    ctx.lineWidth = 2
-    ctx.beginPath()
-    ctx.arc(380, 120, 60, 0, Math.PI * 2)
-    ctx.stroke()
-    ctx.beginPath()
-    ctx.arc(400, 140, 40, 0, Math.PI * 2)
-    ctx.stroke()
-
-    // Triangle
-    ctx.strokeStyle = 'rgba(80, 200, 230, 0.3)'
-    ctx.lineWidth = 2
-    ctx.beginPath()
-    ctx.moveTo(80, 380)
-    ctx.lineTo(160, 280)
-    ctx.lineTo(240, 380)
-    ctx.closePath()
-    ctx.stroke()
-
-    // Horizontal lines
-    for (let i = 0; i < 4; i++) {
-      ctx.strokeStyle = `rgba(100, 200, 240, ${0.15 + i * 0.05})`
-      ctx.lineWidth = 1
-      ctx.beginPath()
-      ctx.moveTo(60, 400 + i * 20)
-      ctx.lineTo(280, 400 + i * 20)
-      ctx.stroke()
-    }
-
-    // Text
-    ctx.fillStyle = '#b0e8f0'
-    ctx.font = 'bold 48px Arial, sans-serif'
-    ctx.textAlign = 'center'
-    ctx.fillText('Project', 256, 200)
-    ctx.fillText('Alpha', 256, 260)
-
-    // Small dot grid
-    ctx.fillStyle = 'rgba(150, 230, 255, 0.2)'
-    for (let x = 0; x < 6; x++) {
-      for (let y = 0; y < 6; y++) {
-        ctx.beginPath()
-        ctx.arc(320 + x * 25, 300 + y * 25, 2, 0, Math.PI * 2)
-        ctx.fill()
-      }
-    }
-  } else {
-    // Purple/pink gradient background
-    const grad = ctx.createLinearGradient(0, 0, 512, 512)
-    grad.addColorStop(0, '#2a0a3a')
-    grad.addColorStop(0.5, '#4f0d5f')
-    grad.addColorStop(1, '#7a1a6b')
-    ctx.fillStyle = grad
-    ctx.fillRect(0, 0, 512, 512)
-
-    // Geometric shapes — diamond
-    ctx.strokeStyle = 'rgba(255, 130, 220, 0.4)'
-    ctx.lineWidth = 2
-    ctx.beginPath()
-    ctx.moveTo(400, 80)
-    ctx.lineTo(450, 140)
-    ctx.lineTo(400, 200)
-    ctx.lineTo(350, 140)
-    ctx.closePath()
-    ctx.stroke()
-
-    // Concentric squares
-    ctx.strokeStyle = 'rgba(220, 100, 255, 0.3)'
-    for (let i = 0; i < 3; i++) {
-      const s = 30 + i * 20
-      ctx.strokeRect(80 - s / 2, 340 - s / 2, s, s)
-    }
-
-    // Wavy line
-    ctx.strokeStyle = 'rgba(255, 150, 200, 0.3)'
-    ctx.lineWidth = 2
-    ctx.beginPath()
-    for (let x = 60; x < 450; x += 2) {
-      const y = 420 + Math.sin(x * 0.03) * 15
-      if (x === 60) ctx.moveTo(x, y)
-      else ctx.lineTo(x, y)
-    }
-    ctx.stroke()
-
-    // Text
-    ctx.fillStyle = '#e0b0f0'
-    ctx.font = 'bold 48px Arial, sans-serif'
-    ctx.textAlign = 'center'
-    ctx.fillText('Project', 256, 200)
-    ctx.fillText('Beta', 256, 260)
-
-    // Small cross pattern
-    ctx.strokeStyle = 'rgba(255, 180, 240, 0.2)'
-    ctx.lineWidth = 1
-    for (let x = 0; x < 5; x++) {
-      for (let y = 0; y < 5; y++) {
-        const cx = 300 + x * 30
-        const cy = 300 + y * 30
-        ctx.beginPath()
-        ctx.moveTo(cx - 4, cy)
-        ctx.lineTo(cx + 4, cy)
-        ctx.moveTo(cx, cy - 4)
-        ctx.lineTo(cx, cy + 4)
-        ctx.stroke()
-      }
-    }
-  }
-
-  const texture = new THREE.CanvasTexture(canvas)
-  texture.needsUpdate = true
-  return texture
-}
-
 function ImageParticleScene() {
   const meshRef = useRef()
   const scroll = useScroll()
-  const { viewport } = useThree()
+  const { camera } = useThree()
+  const initialCamY = useRef(null)
 
   const textures = useMemo(() => ({
-    A: createCanvasTexture('A'),
-    B: createCanvasTexture('B'),
+    A: createCardTexture('A'),
+    B: createCardTexture('B'),
   }), [])
 
   const { geometry, uniforms } = useMemo(() => {
-    const gridWidth = 4.0
-    const gridHeight = 4.0
-    const offsetY_A = 2.5
-    const offsetY_B = -2.5
+    // Card dimensions in world space (matching 800:1000 aspect = 0.8:1)
+    const cardWidth = 4.0
+    const cardHeight = 5.0
 
     const posA = new Float32Array(PARTICLE_COUNT * 3)
     const posB = new Float32Array(PARTICLE_COUNT * 3)
     const uvs = new Float32Array(PARTICLE_COUNT * 2)
     const seeds = new Float32Array(PARTICLE_COUNT)
+    const swarmSides = new Float32Array(PARTICLE_COUNT)
 
-    for (let i = 0; i < GRID_ROWS; i++) {
-      for (let j = 0; j < GRID_COLS; j++) {
-        const idx = i * GRID_COLS + j
-        const u = j / (GRID_COLS - 1)
-        const v = i / (GRID_ROWS - 1)
+    for (let row = 0; row < GRID_ROWS; row++) {
+      for (let col = 0; col < GRID_COLS; col++) {
+        const idx = row * GRID_COLS + col
+        const u = col / (GRID_COLS - 1)
+        const v = row / (GRID_ROWS - 1)
 
-        // Position A — upper grid
-        posA[idx * 3] = (u - 0.5) * gridWidth
-        posA[idx * 3 + 1] = (0.5 - v) * gridHeight + offsetY_A
+        // Position A: card centered at origin
+        posA[idx * 3]     = (u - 0.5) * cardWidth
+        posA[idx * 3 + 1] = (0.5 - v) * cardHeight
         posA[idx * 3 + 2] = 0
 
-        // Position B — lower grid
-        posB[idx * 3] = (u - 0.5) * gridWidth
-        posB[idx * 3 + 1] = (0.5 - v) * gridHeight + offsetY_B
+        // Position B: same layout, same center (camera handles the transition)
+        posB[idx * 3]     = (u - 0.5) * cardWidth
+        posB[idx * 3 + 1] = (0.5 - v) * cardHeight
         posB[idx * 3 + 2] = 0
 
-        // UV for texture sampling
-        uvs[idx * 2] = u
-        uvs[idx * 2 + 1] = 1.0 - v // flip V to match canvas top-left origin
+        // UV (flip V for canvas top-left origin)
+        uvs[idx * 2]     = u
+        uvs[idx * 2 + 1] = 1.0 - v
 
-        // Random seed
         seeds[idx] = Math.random()
+
+        // Swarm side: left half of card → left swarm (-1), right half → right swarm (+1)
+        // Add some randomness at the center so the split isn't a hard line
+        const centerBias = (u - 0.5) * 4.0 // strong left/right signal
+        const noise = (Math.random() - 0.5) * 0.8 // some randomness
+        swarmSides[idx] = (centerBias + noise) > 0 ? 1.0 : -1.0
       }
     }
 
@@ -320,6 +444,7 @@ function ImageParticleScene() {
     geo.setAttribute('positionB', new THREE.BufferAttribute(posB, 3))
     geo.setAttribute('aUv', new THREE.BufferAttribute(uvs, 2))
     geo.setAttribute('randomSeed', new THREE.BufferAttribute(seeds, 1))
+    geo.setAttribute('swarmSide', new THREE.BufferAttribute(swarmSides, 1))
 
     const unis = {
       uProgress: { value: 0 },
@@ -340,10 +465,24 @@ function ImageParticleScene() {
     }
   }, [textures, geometry])
 
-  useFrame((state) => {
+  useFrame(({ clock }) => {
     if (!meshRef.current) return
-    uniforms.uProgress.value = scroll.offset
-    uniforms.uTime.value = state.clock.elapsedTime
+
+    // Capture initial camera Y on first frame
+    if (initialCamY.current === null) {
+      initialCamY.current = camera.position.y
+    }
+
+    const progress = THREE.MathUtils.clamp(scroll.offset, 0, 1)
+    uniforms.uProgress.value = progress
+    uniforms.uTime.value = clock.getElapsedTime()
+
+    // Camera follows swarms downward, returns for reform
+    // Bell curve: ease into follow during dissolve, ease back during reform
+    const followIn = smoothstep(0.15, 0.4, progress)
+    const followOut = smoothstep(0.65, 0.95, progress)
+    const cameraOffset = followIn * (1.0 - followOut) * 5.0
+    camera.position.y = initialCamY.current - cameraOffset
   })
 
   return (
