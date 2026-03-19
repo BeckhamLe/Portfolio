@@ -1,183 +1,171 @@
-import { useRef, useMemo } from 'react'
+import { useRef, useMemo, useState, useEffect } from 'react'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 
-/**
- * Depth Parallax — Flat image + depth map, mouse movement shifts layers
- * at different speeds creating a fake 3D "2.5D photo" effect.
- * Good for project screenshots.
- */
-
 const vertexShader = /* glsl */ `
-varying vec2 vUv;
-
-void main() {
-  vUv = uv;
-  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-}
+  varying vec2 vUv;
+  void main() {
+    vUv = uv;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  }
 `
 
 const fragmentShader = /* glsl */ `
-uniform sampler2D uColorTexture;
-uniform sampler2D uDepthTexture;
-uniform vec2 uMouse;
-uniform float uStrength;
+  precision highp float;
 
-varying vec2 vUv;
+  uniform sampler2D uColorTexture;
+  uniform sampler2D uDepthTexture;
+  uniform vec2 uMouse;
+  uniform float uStrength;
 
-void main() {
-  vec2 uv = vUv;
+  varying vec2 vUv;
 
-  // Sample depth (0=far, 1=near)
-  float depth = texture2D(uDepthTexture, uv).r;
+  void main() {
+    vec2 uv = vUv;
 
-  // Offset UV based on mouse position and depth
-  // Near objects (depth=1) move MORE opposite to mouse
-  // Far objects (depth=0) move LESS
-  vec2 offset = uMouse * depth * uStrength;
+    // Sample depth (0=far, 1=near)
+    float depth = texture2D(uDepthTexture, uv).r;
 
-  // Sample color at offset UV
-  vec3 color = texture2D(uColorTexture, uv + offset).rgb;
+    // Offset UV based on mouse and depth — near moves more
+    vec2 offset = uMouse * depth * uStrength;
 
-  gl_FragColor = vec4(color, 1.0);
-}
+    // Clamp to avoid sampling outside texture
+    vec2 sampledUV = clamp(uv + offset, 0.0, 1.0);
+
+    vec3 color = texture2D(uColorTexture, sampledUV).rgb;
+
+    // Subtle vignette
+    float vignette = 1.0 - length(uv - 0.5) * 0.3;
+    color *= vignette;
+
+    gl_FragColor = vec4(color, 1.0);
+  }
 `
 
-function drawTree(ctx, x, groundY, width, height) {
-  // Trunk
-  ctx.fillStyle = '#3a2510'
-  ctx.fillRect(x - width * 0.15, groundY - height * 0.4, width * 0.3, height * 0.4)
-  // Canopy (triangle)
-  ctx.fillStyle = '#0a3a08'
-  ctx.beginPath()
-  ctx.moveTo(x - width, groundY - height * 0.3)
-  ctx.lineTo(x, groundY - height)
-  ctx.lineTo(x + width, groundY - height * 0.3)
-  ctx.fill()
-}
-
-function drawTreeDepth(ctx, x, groundY, width, height, shade) {
-  // Trunk
-  ctx.fillStyle = shade
-  ctx.fillRect(x - width * 0.15, groundY - height * 0.4, width * 0.3, height * 0.4)
-  // Canopy (triangle)
-  ctx.fillStyle = shade
-  ctx.beginPath()
-  ctx.moveTo(x - width, groundY - height * 0.3)
-  ctx.lineTo(x, groundY - height)
-  ctx.lineTo(x + width, groundY - height * 0.3)
-  ctx.fill()
-}
-
-function createColorImage() {
+// Generate a depth map from the dark slide image
+// The dark slide has: geometric shapes (foreground), title text (midground), dark bg (far)
+function createDepthMapFromImage(image) {
   const canvas = document.createElement('canvas')
-  canvas.width = 512
-  canvas.height = 512
+  const w = image.width
+  const h = image.height
+  canvas.width = w
+  canvas.height = h
   const ctx = canvas.getContext('2d')
 
-  // Sky gradient background
-  const skyGrad = ctx.createLinearGradient(0, 0, 0, 300)
-  skyGrad.addColorStop(0, '#87CEEB')
-  skyGrad.addColorStop(1, '#4A90D9')
-  ctx.fillStyle = skyGrad
-  ctx.fillRect(0, 0, 512, 512)
+  // Draw the source image to read pixel data
+  ctx.drawImage(image, 0, 0)
+  const imageData = ctx.getImageData(0, 0, w, h)
+  const pixels = imageData.data
 
-  // Mountains/hills (midground)
-  ctx.fillStyle = '#2d5a27'
-  ctx.beginPath()
-  ctx.moveTo(0, 350)
-  ctx.quadraticCurveTo(128, 250, 256, 300)
-  ctx.quadraticCurveTo(384, 230, 512, 310)
-  ctx.lineTo(512, 512)
-  ctx.lineTo(0, 512)
-  ctx.fill()
+  // Create depth map based on brightness + position heuristics
+  // Brighter/more saturated elements = foreground (geometric shapes, text)
+  // Dark background = far
+  const depthCanvas = document.createElement('canvas')
+  depthCanvas.width = w
+  depthCanvas.height = h
+  const depthCtx = depthCanvas.getContext('2d')
+  const depthData = depthCtx.createImageData(w, h)
 
-  // Second hill layer
-  ctx.fillStyle = '#1a4a1a'
-  ctx.beginPath()
-  ctx.moveTo(0, 400)
-  ctx.quadraticCurveTo(200, 340, 350, 380)
-  ctx.quadraticCurveTo(450, 350, 512, 370)
-  ctx.lineTo(512, 512)
-  ctx.lineTo(0, 512)
-  ctx.fill()
+  for (let i = 0; i < pixels.length; i += 4) {
+    const r = pixels[i]
+    const g = pixels[i + 1]
+    const b = pixels[i + 2]
 
-  // Foreground trees
-  drawTree(ctx, 80, 280, 30, 120)
-  drawTree(ctx, 400, 300, 25, 100)
-  drawTree(ctx, 200, 310, 20, 90)
+    // Brightness
+    const brightness = (r * 0.299 + g * 0.587 + b * 0.114) / 255
 
-  // Ground
-  ctx.fillStyle = '#1a3a12'
-  ctx.fillRect(0, 430, 512, 82)
+    // Saturation (how colorful — geometric shapes are colored)
+    const max = Math.max(r, g, b)
+    const min = Math.min(r, g, b)
+    const saturation = max === 0 ? 0 : (max - min) / max
 
-  return new THREE.CanvasTexture(canvas)
-}
+    // Combine: bright or saturated = near, dark and unsaturated = far
+    // Text is bright white → high depth
+    // Geometric shapes are colored (saturated) → high depth
+    // Dark background → low depth
+    let depth = brightness * 0.6 + saturation * 0.4
 
-function createDepthMap() {
-  const canvas = document.createElement('canvas')
-  canvas.width = 512
-  canvas.height = 512
-  const ctx = canvas.getContext('2d')
+    // Boost contrast
+    depth = Math.pow(depth, 0.7)
 
-  // Sky — black (far away, depth=0)
-  ctx.fillStyle = '#000000'
-  ctx.fillRect(0, 0, 512, 512)
+    // Slight edge bias: elements near edges are slightly more foreground
+    // (the geometric shapes in the dark slide are at corners)
+    const px = (i / 4) % w
+    const py = Math.floor((i / 4) / w)
+    const edgeX = Math.abs(px / w - 0.5) * 2 // 0 at center, 1 at edge
+    const edgeY = Math.abs(py / h - 0.5) * 2
+    const edgeFactor = Math.max(edgeX, edgeY)
 
-  // Far hills — dark gray
-  ctx.fillStyle = '#555555'
-  ctx.beginPath()
-  ctx.moveTo(0, 350)
-  ctx.quadraticCurveTo(128, 250, 256, 300)
-  ctx.quadraticCurveTo(384, 230, 512, 310)
-  ctx.lineTo(512, 512)
-  ctx.lineTo(0, 512)
-  ctx.fill()
+    // Boost depth for bright elements near edges (the geometric decorations)
+    if (depth > 0.3 && edgeFactor > 0.4) {
+      depth = Math.min(1, depth * 1.3)
+    }
 
-  // Near hills — medium gray
-  ctx.fillStyle = '#888888'
-  ctx.beginPath()
-  ctx.moveTo(0, 400)
-  ctx.quadraticCurveTo(200, 340, 350, 380)
-  ctx.quadraticCurveTo(450, 350, 512, 370)
-  ctx.lineTo(512, 512)
-  ctx.lineTo(0, 512)
-  ctx.fill()
+    const d = Math.floor(Math.min(1, Math.max(0, depth)) * 255)
+    depthData.data[i] = d
+    depthData.data[i + 1] = d
+    depthData.data[i + 2] = d
+    depthData.data[i + 3] = 255
+  }
 
-  // Foreground trees — bright (near, depth≈1)
-  drawTreeDepth(ctx, 80, 280, 30, 120, '#dddddd')
-  drawTreeDepth(ctx, 400, 300, 25, 100, '#dddddd')
-  drawTreeDepth(ctx, 200, 310, 20, 90, '#dddddd')
+  depthCtx.putImageData(depthData, 0, 0)
 
-  // Ground — white (closest, depth=1)
-  ctx.fillStyle = '#ffffff'
-  ctx.fillRect(0, 430, 512, 82)
+  // Apply a blur pass for smoother depth transitions
+  // Use canvas filter for quick gaussian blur
+  const blurCanvas = document.createElement('canvas')
+  blurCanvas.width = w
+  blurCanvas.height = h
+  const blurCtx = blurCanvas.getContext('2d')
+  blurCtx.filter = 'blur(8px)'
+  blurCtx.drawImage(depthCanvas, 0, 0)
 
-  return new THREE.CanvasTexture(canvas)
-}
-
-function createTextures() {
-  const colorTex = createColorImage()
-  const depthTex = createDepthMap()
-  return { colorTex, depthTex }
+  const texture = new THREE.CanvasTexture(blurCanvas)
+  texture.needsUpdate = true
+  return texture
 }
 
 export default function DepthParallax() {
   const meshRef = useRef()
   const mouseTarget = useRef(new THREE.Vector2())
   const mouseSmooth = useRef(new THREE.Vector2())
+  const [textures, setTextures] = useState(null)
 
-  const { colorTex, depthTex } = useMemo(() => createTextures(), [])
+  // Load the real screenshot
+  useEffect(() => {
+    const loader = new THREE.TextureLoader()
+    const img = new Image()
+    img.crossOrigin = 'anonymous'
+    img.onload = () => {
+      // Create color texture
+      const colorTex = loader.load('/images/present_builder_app_dark_slides.png')
+      colorTex.minFilter = THREE.LinearFilter
+      colorTex.magFilter = THREE.LinearFilter
+
+      // Generate depth map from image
+      const depthTex = createDepthMapFromImage(img)
+
+      setTextures({ color: colorTex, depth: depthTex })
+    }
+    img.src = '/images/present_builder_app_dark_slides.png'
+  }, [])
 
   const uniforms = useMemo(
     () => ({
-      uColorTexture: { value: colorTex },
-      uDepthTexture: { value: depthTex },
+      uColorTexture: { value: null },
+      uDepthTexture: { value: null },
       uMouse: { value: new THREE.Vector2() },
-      uStrength: { value: 0.03 },
+      uStrength: { value: 0.025 },
     }),
     []
   )
+
+  // Update textures when loaded
+  useEffect(() => {
+    if (textures) {
+      uniforms.uColorTexture.value = textures.color
+      uniforms.uDepthTexture.value = textures.depth
+    }
+  }, [textures, uniforms])
 
   useFrame(({ pointer }) => {
     mouseTarget.current.set(pointer.x, pointer.y)
@@ -185,17 +173,24 @@ export default function DepthParallax() {
     uniforms.uMouse.value.copy(mouseSmooth.current)
   })
 
+  // Match the screenshot aspect ratio (1918x1062 ≈ 16:9)
+  const aspect = 1918 / 1062
+  const planeHeight = 4.5
+  const planeWidth = planeHeight * aspect
+
   return (
     <>
       <color attach="background" args={['#0a0a0a']} />
-      <mesh ref={meshRef}>
-        <planeGeometry args={[5, 5]} />
-        <shaderMaterial
-          vertexShader={vertexShader}
-          fragmentShader={fragmentShader}
-          uniforms={uniforms}
-        />
-      </mesh>
+      {textures && (
+        <mesh ref={meshRef}>
+          <planeGeometry args={[planeWidth, planeHeight]} />
+          <shaderMaterial
+            vertexShader={vertexShader}
+            fragmentShader={fragmentShader}
+            uniforms={uniforms}
+          />
+        </mesh>
+      )}
     </>
   )
 }
