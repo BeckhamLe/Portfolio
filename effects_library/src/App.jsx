@@ -29,6 +29,8 @@ const TerrainBridge = lazy(() => import('./components/TerrainBridge'))
 const GravitySandbox = lazy(() => import('./components/GravitySandbox'))
 const ScrollVelocitySmear = lazy(() => import('./components/ScrollVelocitySmear'))
 const TypeToShatter = lazy(() => import('./components/TypeToShatter'))
+const SoundReactiveMesh = lazy(() => import('./components/SoundReactiveMesh'))
+const DragToSculpt = lazy(() => import('./components/DragToSculpt'))
 
 const STATUS_COLORS = {
   working: '#00d4a1',
@@ -112,6 +114,10 @@ function SceneContent({ activeDemo }) {
       return <ScrollVelocitySmear />
     case 'typeshatter':
       return <TypeToShatter />
+    case 'soundreactive':
+      return <SoundReactiveMesh />
+    case 'dragtosculpt':
+      return <DragToSculpt />
     default:
       return null
   }
