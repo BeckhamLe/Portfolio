@@ -140,7 +140,7 @@ function App() {
             </p>
             <div className="contact-links">
               <a href="https://github.com/beckhamle" className="contact-link" target="_blank" rel="noopener noreferrer">GitHub</a>
-              <a href="https://linkedin.com/in/beckhamle" className="contact-link" target="_blank" rel="noopener noreferrer">LinkedIn</a>
+              <a href="https://www.linkedin.com/in/beckham-le-51050a1b6/" className="contact-link" target="_blank" rel="noopener noreferrer">LinkedIn</a>
             </div>
           </div>
           <a href="mailto:hello@beckhamle.dev" className="contact-email">hello@beckhamle.dev</a>
