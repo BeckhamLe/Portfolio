@@ -32,10 +32,14 @@ function DotMatrixText({ text, cellSize = 6, gap = 1, letterGap = 3 }) {
   const letters = text.toUpperCase().split('')
   const totalWidth = letters.length * letterWidth + (letters.length - 1) * spacing
   const totalHeight = DOT_ROWS * step - gap
+  // viewBox padding so the last letter never sits flush against the LCD frame,
+  // even when the housing is narrow (mobile).
+  const padX = cellSize * 2
+  const padY = cellSize
 
   return (
     <svg
-      viewBox={`0 0 ${totalWidth} ${totalHeight}`}
+      viewBox={`${-padX} ${-padY} ${totalWidth + padX * 2} ${totalHeight + padY * 2}`}
       width="100%"
       height="100%"
       preserveAspectRatio="xMidYMid meet"
