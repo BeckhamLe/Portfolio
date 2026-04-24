@@ -1,3 +1,8 @@
+/* =========================================================
+   Elevator Panel — Cassette Futurism
+   Design tokens + resets
+   ========================================================= */
+
 *,
 *::before,
 *::after {
@@ -7,15 +12,85 @@
 }
 
 :root {
-  --bg: #0a0a0a;
-  --bg-elevated: #141414;
-  --text: #e8e4df;
-  --text-muted: #8a8580;
-  --accent: #c8a45c;
-  --accent-dim: rgba(200, 164, 92, 0.15);
-  --border: rgba(255, 255, 255, 0.06);
-  --font-serif: 'DM Serif Display', Georgia, serif;
-  --font-sans: 'Inter', -apple-system, sans-serif;
+  /* -----------------------------------------------------
+     Color — OKLCH, committed pale-mint panel + warm interior
+     ----------------------------------------------------- */
+
+  /* Panel body (pale mint, tinted neutral) */
+  --panel-hi:       oklch(91% 0.025 155);   /* panel top edge highlight */
+  --panel:          oklch(85% 0.04  155);   /* main panel body */
+  --panel-lo:       oklch(73% 0.05  155);   /* panel shadow / recess */
+  --panel-deep:     oklch(58% 0.05  155);   /* deep recess around LCD */
+  --panel-edge:     oklch(40% 0.04  155);   /* hard dark edge */
+
+  /* Interior (distinct warm cream-peach, textured) */
+  --interior-hi:    oklch(92% 0.028 75);
+  --interior:       oklch(88% 0.04  75);
+  --interior-lo:    oklch(78% 0.05  75);
+  --interior-edge:  oklch(45% 0.05  55);
+
+  /* Doors (slightly deeper mint than panel — reads as painted steel) */
+  --door:           oklch(78% 0.05  155);
+  --door-hi:        oklch(84% 0.04  155);
+  --door-lo:        oklch(66% 0.06  155);
+
+  /* LCD — deep recessed housing, warm amber readout */
+  --lcd-bg:         oklch(18% 0.015 75);
+  --lcd-bg-edge:    oklch(10% 0.01  75);
+  --lcd-on:         oklch(82% 0.18  75);
+  --lcd-off:        oklch(28% 0.03  75);
+
+  /* Button LEDs */
+  --led-off:        oklch(48% 0.07  35);    /* dim warm, steady */
+  --led-on:         oklch(78% 0.21  50);    /* bright amber-orange */
+
+  /* Text */
+  --ink-panel:      oklch(22% 0.02  155);   /* text on panel */
+  --ink-interior:   oklch(23% 0.02  70);    /* text on interior */
+  --ink-muted:      oklch(45% 0.02  70);    /* secondary on interior */
+  --ink-label:      oklch(32% 0.02  155);   /* small labels on panel */
+
+  /* -----------------------------------------------------
+     Type scale (perfect fourth, 1.333)
+     ----------------------------------------------------- */
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', 'Menlo', ui-monospace, monospace;
+
+  --text-xs:   0.75rem;     /* 12px */
+  --text-sm:   0.875rem;    /* 14px */
+  --text-base: 1rem;        /* 16px */
+  --text-lg:   1.333rem;    /* ~21px */
+  --text-xl:   1.777rem;    /* ~28px */
+  --text-2xl:  2.369rem;    /* ~38px */
+  --text-3xl:  3.157rem;    /* ~51px */
+
+  /* -----------------------------------------------------
+     Space (4pt base)
+     ----------------------------------------------------- */
+  --space-1:  0.25rem;
+  --space-2:  0.5rem;
+  --space-3:  0.75rem;
+  --space-4:  1rem;
+  --space-5:  1.25rem;
+  --space-6:  1.5rem;
+  --space-8:  2rem;
+  --space-10: 2.5rem;
+  --space-12: 3rem;
+  --space-16: 4rem;
+
+  /* -----------------------------------------------------
+     Motion
+     ----------------------------------------------------- */
+  --ease-out-quart:  cubic-bezier(0.25, 1, 0.5, 1);
+  --ease-out-expo:   cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out:     cubic-bezier(0.65, 0, 0.35, 1);
+  --ease-in-expo:    cubic-bezier(0.7, 0, 0.84, 0);
+
+  --dur-press:       120ms;
+  --dur-led:         180ms;
+  --dur-door-close:  720ms;
+  --dur-door-open:   820ms;
+  --dur-content:     320ms;
 }
 
 html {
@@ -25,12 +100,13 @@ html {
 }
 
 body {
-  background: var(--bg);
-  color: var(--text);
+  background: var(--panel-deep);
+  color: var(--ink-panel);
   font-family: var(--font-sans);
-  font-weight: 300;
-  line-height: 1.6;
-  overflow-x: hidden;
+  font-weight: 400;
+  line-height: 1.5;
+  overflow: hidden;  /* elevator fills viewport; content scrolls inside interior */
+  min-height: 100vh;
 }
 
 a {
@@ -38,12 +114,38 @@ a {
   text-decoration: none;
 }
 
-img {
-  display: block;
-  max-width: 100%;
+button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+/* Keyboard focus ring — amber offset, fits the aesthetic */
+:focus {
+  outline: none;
+}
+
+:focus-visible {
+  outline: 2px solid var(--led-on);
+  outline-offset: 3px;
+  border-radius: 2px;
 }
 
 ::selection {
-  background: var(--accent);
-  color: var(--bg);
+  background: var(--lcd-on);
+  color: var(--lcd-bg);
+}
+
+/* Reduced motion — kills all transitions and animations */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
